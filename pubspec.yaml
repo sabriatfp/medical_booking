@@ -1,0 +1,43 @@
+name: medical_booking
+description: "A new Flutter project."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # واجهات وأساسيات
+  cupertino_icons: ^1.0.8
+  flutter_localizations:
+    sdk: flutter
+  url_launcher: ^6.3.0
+  image_picker: ^1.0.7
+
+  # إشعارات محلية فقط (بدون FCM حالياً)
+  flutter_local_notifications: ^17.2.2
+  timezone: ^0.9.2
+
+  # =========================
+  # 🔥 Firebase (سلسلة core 2.x متوافقة)
+  # =========================
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.17.0
+  cloud_firestore: ^4.17.5
+  firebase_storage: ^11.7.7 # 👈 توافق مضمون مع core 2.x و firestore 4.x
+
+  # مؤجلة الآن:
+  # firebase_messaging: ^14.9.4
+  # cloud_functions: ^4.7.6
+  # firebase_dynamic_links: ^5.4.14
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
