@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:medical_booking/screens/doctor/generate_codes_screen.dart';
 
 class DoctorSettingsScreen extends StatefulWidget {
   const DoctorSettingsScreen({super.key});
@@ -288,6 +289,41 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
               ),
 
               const SizedBox(height: 20),
+
+              /// 🟣 أكواد السكريتير
+              _buildSectionCard(
+                icon: Icons.badge_outlined,
+                title: "أكواد السكريتير",
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      "أنشئ أكواد دخول للسكريتير، فعّل/عطّل الأكواد، وحدد صلاحية انتهاء.",
+                      style: TextStyle(height: 1.2),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.qr_code_2_outlined),
+                        label: const Text("إدارة أكواد السكريتير"),
+                        onPressed: (doctorId == null || doctorId!.isEmpty)
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => GenerateCodesScreen(
+                                      doctorId: doctorId!,
+                                    ),
+                                  ),
+                                );
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
               /// 🔐 الأمان
               _buildSectionCard(

@@ -1,153 +1,198 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
+// خدمة الطبيب لاستخراج doctorId تلقائيًا عند وضع "الطبيب"
+import '../../services/doctor_service.dart';
+
 class DoctorCalendarScreen extends StatefulWidget {
-  const DoctorCalendarScreen({super.key});
+  /// في وضع الطبيب: اتركها null وسيتم استنتاج doctorId من الحساب
+  /// في وضع السكرتير: مرّر doctorId + asSecretary: true
+  final String? doctorId;
+  final bool asSecretary;
+
+  /// NEW: إخفاء الهيدر الداخلي (العنوان + السهم) داخل فضاء السكريتير
+  final bool hideInnerHeader;
+
+  const DoctorCalendarScreen({
+    super.key,
+    this.doctorId,
+    this.asSecretary = false,
+    this.hideInnerHeader = false, // الافتراضي: لا نخفي
+  });
 
   @override
   State<DoctorCalendarScreen> createState() => _DoctorCalendarScreenState();
 }
 
 class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
-  DateTime selectedMonth = DateTime.now();
-  String? doctorId;
+  // الشهر الحالي المعروض
+  DateTime _selectedMonth = DateTime.now();
 
-  Map<String, Map<String, dynamic>> calendarData = {};
-  bool loading = true;
+  // doctorId النهائي بعد الحلّ
+  String? _resolvedDoctorId;
+
+  // تحميل/خطأ
+  bool _loading = true;
+  String? _error;
+
+  // بيانات التقويم
+  final Map<String, Map<String, dynamic>> _calendarData = {};
 
   // ✅ إحصائيات الشهر
-  int totalAppointments = 0;
-  int confirmedAppointments = 0;
-  int cancelledAppointments = 0;
-  double totalRevenue = 0;
+  int _totalAppointments = 0;
+  int _confirmedAppointments = 0;
+  int _cancelledAppointments = 0;
+  double _totalRevenue = 0;
 
   @override
   void initState() {
     super.initState();
-    fetchDoctorId();
+    _resolveDoctorId();
   }
 
-  Future<void> fetchDoctorId() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() => loading = false);
-      return;
+  Future<void> _resolveDoctorId() async {
+    try {
+      if (widget.doctorId != null && widget.doctorId!.isNotEmpty) {
+        _resolvedDoctorId = widget.doctorId;
+      } else {
+        // وضع الطبيب: استخرج المعرّف من الخدمة
+        _resolvedDoctorId = await DoctorService().getDoctorId();
+      }
+
+      if (_resolvedDoctorId == null || _resolvedDoctorId!.isEmpty) {
+        _error = 'لم يتم العثور على معرف الطبيب';
+      } else {
+        await _fetchCalendarData();
+      }
+    } catch (_) {
+      _error = 'خطأ أثناء تحديد الطبيب';
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    doctorId = doc.data()?['doctorId'];
-    if (doctorId == null) {
-      setState(() => loading = false);
-      return;
-    }
-
-    await fetchCalendarData();
   }
 
-  Future<void> fetchCalendarData() async {
-    if (doctorId == null) return;
+  Future<void> _fetchCalendarData() async {
+    if (_resolvedDoctorId == null) return;
 
-    setState(() => loading = true);
+    setState(() => _loading = true);
 
-    calendarData.clear();
-    totalAppointments = 0;
-    confirmedAppointments = 0;
-    cancelledAppointments = 0;
-    totalRevenue = 0;
+    _calendarData.clear();
+    _totalAppointments = 0;
+    _confirmedAppointments = 0;
+    _cancelledAppointments = 0;
+    _totalRevenue = 0;
 
-    /// 🔹 المواعيد
-    final snap = await FirebaseFirestore.instance
+    final fs = FirebaseFirestore.instance;
+
+    // 🔹 المواعيد (نجلب جميع مواعيد الطبيب ثم نرشّح حسب الشهر على العميل)
+    final apptSnap = await fs
         .collection('appointments')
-        .where('doctorId', isEqualTo: doctorId)
+        .where('doctorId', isEqualTo: _resolvedDoctorId)
         .get();
 
-    for (var doc in snap.docs) {
+    for (var doc in apptSnap.docs) {
       final d = doc.data();
-      final date = DateTime.tryParse(d['date'] ?? '');
+      final dateStr = (d['date'] ?? '').toString();
+      final date = DateTime.tryParse(dateStr);
       if (date == null) continue;
 
-      if (date.year == selectedMonth.year &&
-          date.month == selectedMonth.month) {
-        totalAppointments++;
+      final sameMonth =
+          (date.year == _selectedMonth.year &&
+          date.month == _selectedMonth.month);
+      if (!sameMonth) continue;
 
-        final status = d['status'] ?? 'confirmed';
-        final price = (d['price'] ?? 0).toDouble();
+      _totalAppointments++;
 
-        if (status == 'cancelled') {
-          cancelledAppointments++;
-        } else {
-          confirmedAppointments++;
-          totalRevenue += price;
-        }
+      // معالجة السعر كـ num (int/double)
+      double price = 0;
+      final anyPrice = d['price'];
+      if (anyPrice is int) price = anyPrice.toDouble();
+      if (anyPrice is double) price = anyPrice;
 
-        final key = DateFormat('yyyy-MM-dd').format(date);
-        calendarData.putIfAbsent(
-          key,
-          () => {'appointments': 0, 'notes': '', 'isDayOff': false},
-        );
-
-        calendarData[key]!['appointments']++;
+      // دعم كلا الصيغتين: canceled/cancelled
+      final status = (d['status'] ?? 'confirmed').toString();
+      final isCanceled = status == 'canceled' || status == 'cancelled';
+      if (isCanceled) {
+        _cancelledAppointments++;
+      } else {
+        _confirmedAppointments++;
+        _totalRevenue += price;
       }
-    }
-    debugPrint("DoctorId from app: $doctorId");
 
-    /// 🔹 أيام العطل + الملاحظات
-    final daysSnap = await FirebaseFirestore.instance
+      final key = DateFormat('yyyy-MM-dd').format(date);
+      _calendarData.putIfAbsent(
+        key,
+        () => {'appointments': 0, 'notes': '', 'isDayOff': false},
+      );
+
+      _calendarData[key]!['appointments'] =
+          (_calendarData[key]!['appointments'] ?? 0) + 1;
+    }
+
+    // 🔹 أيام العطل + الملاحظات
+    // بنية: doctor_days/{doctorId}/days/{yyyy-MM-dd} = { notes: string, isDayOff: bool }
+    final daysSnap = await fs
         .collection('doctor_days')
-        .doc(doctorId)
+        .doc(_resolvedDoctorId)
         .collection('days')
         .get();
 
     for (var doc in daysSnap.docs) {
       final key = doc.id;
-      calendarData.putIfAbsent(
+      _calendarData.putIfAbsent(
         key,
         () => {'appointments': 0, 'notes': '', 'isDayOff': false},
       );
 
-      calendarData[key]!['notes'] = doc['notes'] ?? '';
-      calendarData[key]!['isDayOff'] = doc['isDayOff'] ?? false;
+      final data = doc.data();
+      _calendarData[key]!['notes'] = (data['notes'] ?? '').toString();
+      _calendarData[key]!['isDayOff'] = data['isDayOff'] == true;
     }
 
-    setState(() => loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
-  void nextMonth() {
+  void _nextMonth() {
     setState(() {
-      selectedMonth = DateTime(selectedMonth.year, selectedMonth.month + 1, 1);
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + 1,
+        1,
+      );
     });
-    fetchCalendarData();
+    // ignore: discarded_futures
+    _fetchCalendarData();
   }
 
-  void prevMonth() {
+  void _prevMonth() {
     setState(() {
-      selectedMonth = DateTime(selectedMonth.year, selectedMonth.month - 1, 1);
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month - 1,
+        1,
+      );
     });
-    fetchCalendarData();
+    // ignore: discarded_futures
+    _fetchCalendarData();
   }
 
   /// ✅ شريط الإحصائيات
-  Widget buildStatsBar() {
+  Widget _buildStatsBar() {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          statCard("المواعيد", totalAppointments.toString(), Icons.event),
-          statCard(
+          _statCard("المواعيد", _totalAppointments.toString(), Icons.event),
+          _statCard(
             "المؤكدة",
-            confirmedAppointments.toString(),
+            _confirmedAppointments.toString(),
             Icons.check_circle,
           ),
-          statCard("الملغاة", cancelledAppointments.toString(), Icons.cancel),
-          statCard(
+          _statCard("الملغاة", _cancelledAppointments.toString(), Icons.cancel),
+          _statCard(
             "الدخل",
-            "${totalRevenue.toStringAsFixed(0)} د",
+            "${_totalRevenue.toStringAsFixed(0)} د",
             Icons.attach_money,
           ),
         ],
@@ -155,7 +200,7 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
     );
   }
 
-  Widget statCard(String title, String value, IconData icon) {
+  Widget _statCard(String title, String value, IconData icon) {
     return Expanded(
       child: Card(
         elevation: 3,
@@ -186,23 +231,25 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
     );
   }
 
-  Future<List<QueryDocumentSnapshot>> fetchAppointmentsForDay(
+  Future<List<QueryDocumentSnapshot>> _fetchAppointmentsForDay(
     DateTime date,
   ) async {
     final dateKey = DateFormat('yyyy-MM-dd').format(date);
 
     final snap = await FirebaseFirestore.instance
         .collection('appointments')
-        .where('doctorId', isEqualTo: doctorId)
+        .where('doctorId', isEqualTo: _resolvedDoctorId)
         .where('date', isEqualTo: dateKey)
         .get();
 
     return snap.docs;
   }
 
-  void openDayDetails(DateTime date, Map<String, dynamic> data) async {
-    final appointments = await fetchAppointmentsForDay(date);
-    final notesController = TextEditingController(text: data['notes'] ?? '');
+  void _openDayDetails(DateTime date, Map<String, dynamic> data) async {
+    final appointments = await _fetchAppointmentsForDay(date);
+    final notesController = TextEditingController(
+      text: (data['notes'] ?? '').toString(),
+    );
 
     showDialog(
       context: context,
@@ -232,12 +279,19 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
                 else
                   ...appointments.map((doc) {
                     final a = doc.data() as Map<String, dynamic>;
+
+                    // عرض آمن للقيم
+                    final name = (a['patientName'] ?? 'مريض').toString();
+                    final time = (a['time'] ?? '--:--').toString();
+                    final status = (a['status'] ?? '').toString();
+                    num priceAny = (a['price'] is num) ? a['price'] as num : 0;
+
                     return Card(
                       child: ListTile(
                         leading: const Icon(Icons.person),
-                        title: Text(a['patientName'] ?? 'مريض'),
-                        subtitle: Text('${a['time']} - ${a['status']}'),
-                        trailing: Text('${a['price']} د'),
+                        title: Text(name),
+                        subtitle: Text('$time - $status'),
+                        trailing: Text('${priceAny.toStringAsFixed(0)} د'),
                       ),
                     );
                   }),
@@ -253,10 +307,9 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
           ElevatedButton(
             onPressed: () async {
               final key = DateFormat('yyyy-MM-dd').format(date);
-
               await FirebaseFirestore.instance
                   .collection('doctor_days')
-                  .doc(doctorId)
+                  .doc(_resolvedDoctorId)
                   .collection('days')
                   .doc(key)
                   .set({
@@ -264,8 +317,9 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
                     'isDayOff': data['isDayOff'] ?? false,
                   }, SetOptions(merge: true));
 
-              Navigator.pop(context);
-              fetchCalendarData(); // تحديث
+              if (mounted) Navigator.pop(context);
+              // ignore: discarded_futures
+              _fetchCalendarData();
             },
             child: const Text('حفظ'),
           ),
@@ -276,36 +330,43 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
+    if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (doctorId == null) {
-      return const Scaffold(
-        body: Center(child: Text('لم يتم العثور على معرف الطبيب')),
+    if (_error != null) {
+      // عند تفعيل hideInnerHeader نخفي AppBar حتى في حالة الخطأ
+      return Scaffold(
+        appBar: widget.hideInnerHeader
+            ? null
+            : AppBar(title: const Text('تقويم الطبيب')),
+        body: Center(child: Text(_error!)),
       );
     }
 
     final daysInMonth = DateTime(
-      selectedMonth.year,
-      selectedMonth.month + 1,
+      _selectedMonth.year,
+      _selectedMonth.month + 1,
       0,
     ).day;
     final firstWeekday = DateTime(
-      selectedMonth.year,
-      selectedMonth.month,
+      _selectedMonth.year,
+      _selectedMonth.month,
       1,
     ).weekday;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'تقويم الطبيب (${DateFormat.MMMM('en').format(selectedMonth)})',
-        ),
-      ),
+      // ❗️لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير
+      appBar: widget.hideInnerHeader
+          ? null
+          : AppBar(
+              title: Text(
+                'تقويم الطبيب (${DateFormat.MMMM('fr').format(_selectedMonth)})',
+              ),
+            ),
       body: Column(
         children: [
-          buildStatsBar(), // ⭐ الإضافة الجديدة
+          _buildStatsBar(),
 
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -313,19 +374,21 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  onPressed: prevMonth,
+                  onPressed: _prevMonth,
                   icon: const Icon(Icons.arrow_back),
+                  tooltip: 'الشهر السابق',
                 ),
                 Text(
-                  DateFormat('MMMM yyyy', 'en').format(selectedMonth),
+                  DateFormat('MMMM yyyy', 'en').format(_selectedMonth),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 IconButton(
-                  onPressed: nextMonth,
+                  onPressed: _nextMonth,
                   icon: const Icon(Icons.arrow_forward),
+                  tooltip: 'الشهر التالي',
                 ),
               ],
             ),
@@ -345,12 +408,12 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
 
                 final day = index - firstWeekday + 2;
                 final date = DateTime(
-                  selectedMonth.year,
-                  selectedMonth.month,
+                  _selectedMonth.year,
+                  _selectedMonth.month,
                   day,
                 );
                 final key = DateFormat('yyyy-MM-dd').format(date);
-                final data = calendarData[key] ?? {};
+                final data = _calendarData[key] ?? {};
 
                 Color bgColor;
                 if (data['isDayOff'] == true) {
@@ -364,7 +427,7 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
                 }
 
                 return GestureDetector(
-                  onTap: () => openDayDetails(date, data),
+                  onTap: () => _openDayDetails(date, data),
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -381,7 +444,6 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
                             '$day',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-
                           if ((data['appointments'] ?? 0) > 0)
                             Container(
                               margin: const EdgeInsets.only(top: 2),
@@ -401,10 +463,8 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
                                 ),
                               ),
                             ),
-
                           if ((data['notes'] ?? '').toString().isNotEmpty)
                             const Icon(Icons.note, size: 14),
-
                           if (data['isDayOff'] == true)
                             const Icon(Icons.beach_access, size: 14),
                         ],

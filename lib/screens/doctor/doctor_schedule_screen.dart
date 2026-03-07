@@ -1,18 +1,38 @@
-// lib/screens/doctor/doctor_schedule_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
+// خدمة الطبيب لاستخراج doctorId تلقائيًا عند وضع "الطبيب"
+import '../../services/doctor_service.dart';
+
 class DoctorScheduleScreen extends StatefulWidget {
-  const DoctorScheduleScreen({super.key});
+  /// في وضع الطبيب: اتركها null وسيتم استنتاج doctorId من الحساب
+  /// في وضع السكرتير: مرّر doctorId + asSecretary: true
+  final String? doctorId;
+  final bool asSecretary;
+
+  /// NEW: إخفاء الهيدر الداخلي (العنوان + السهم) عندما نكون في فضاء السكريتير
+  final bool hideInnerHeader;
+
+  const DoctorScheduleScreen({
+    super.key,
+    this.doctorId,
+    this.asSecretary = false,
+    this.hideInnerHeader = false, // الافتراضي: لا نخفي
+  });
 
   @override
   State<DoctorScheduleScreen> createState() => _DoctorScheduleScreenState();
 }
 
 class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
-  String? doctorId;
+  // ---- هوية الطبيب النهائية ----
+  String? _resolvedDoctorId;
+
+  // ---- حالة تحميل/خطأ ----
+  bool _loading = true;
+  String? _error;
 
   /// المدة المعتمدة فعليًا (المحفوظة في Firestore) — تظهر عليها ✔
   int? slotDuration;
@@ -30,7 +50,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     "الأحد",
   ];
 
-  /// النموذج الأسبوعي الأساسي (يمكن للطبيب تعديله)
+  /// النموذج الأسبوعي الأساسي (يمكن للطبيب/السكرتير تعديله)
   Map<String, Map<String, dynamic>> weeklyTemplate = {
     "الإثنين": {"available": true, "start": "08:00", "end": "16:00"},
     "الثلاثاء": {"available": true, "start": "08:00", "end": "16:00"},
@@ -47,31 +67,35 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDoctorId();
+    _resolveDoctorId();
   }
 
-  Future<void> _loadDoctorId() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+  Future<void> _resolveDoctorId() async {
+    try {
+      if (widget.doctorId != null && widget.doctorId!.isNotEmpty) {
+        _resolvedDoctorId = widget.doctorId; // وضع السكرتير
+      } else {
+        // وضع الطبيب: نستخرج doctorId من الخدمة
+        _resolvedDoctorId = await DoctorService().getDoctorId();
+      }
 
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
-    if (!snap.exists) return;
-
-    doctorId = snap.data()?['doctorId'];
-    if (doctorId == null) return;
-
-    await _loadDoctorSchedule();
-    _generateThreeWeeks();
-    await _updateFullDays();
-
-    if (mounted) setState(() {});
+      if (_resolvedDoctorId == null || _resolvedDoctorId!.isEmpty) {
+        _error = 'لم يتم العثور على معرف الطبيب';
+      } else {
+        await _loadDoctorSchedule();
+        _generateThreeWeeks();
+        await _updateFullDays();
+      }
+    } catch (_) {
+      _error = 'خطأ أثناء تحديد الطبيب';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   /// تحميل إعدادات الطبيب (slotDuration + weeklyTemplate + weeks إن وجدت)
   Future<void> _loadDoctorSchedule() async {
+    final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
 
     final snap = await FirebaseFirestore.instance
@@ -82,14 +106,17 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
     final data = snap.data()!;
     if (data['slotDuration'] != null) {
-      slotDuration = data['slotDuration'];
-      selectedSlot = slotDuration; // ✅ حتى تظهر الشيب المفعّلة عند الدخول
+      // slotDuration مخزّنة كرقم (int)
+      final any = data['slotDuration'];
+      if (any is int) slotDuration = any;
+      if (any is double) slotDuration = any.toInt();
+      selectedSlot = slotDuration; // ✅ تظهر الشيب المفعّلة عند الدخول
     }
 
     if (data['weeklyTemplate'] != null) {
       final t = Map<String, dynamic>.from(data['weeklyTemplate']);
       t.forEach((key, value) {
-        if (weeklyTemplate[key] != null) {
+        if (weeklyTemplate[key] != null && value is Map) {
           weeklyTemplate[key]!['available'] = value['available'];
           weeklyTemplate[key]!['start'] = value['start'];
           weeklyTemplate[key]!['end'] = value['end'];
@@ -152,7 +179,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   }
 
   Future<int> _getAppointmentsCount(DateTime day) async {
+    final doctorId = _resolvedDoctorId;
     if (doctorId == null) return 0;
+
     final start = DateTime(day.year, day.month, day.day);
     final end = DateTime(day.year, day.month, day.day, 23, 59, 59);
 
@@ -166,7 +195,8 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     int c = 0;
     for (var doc in query.docs) {
       final d = doc.data();
-      if (d['status'] == 'pending' || d['status'] == 'confirmed') c++;
+      final s = (d['status'] ?? '').toString();
+      if (s == 'pending' || s == 'confirmed') c++;
     }
     return c;
   }
@@ -184,7 +214,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   /// تحديث حالة الأيام الممتلئة اعتمادًا على slotDuration وعدد المواعيد
   Future<void> _updateFullDays() async {
     if (slotDuration == null) return;
-
     for (var w in weeks) {
       for (var day in w["days"]) {
         if (day["available"] != true) {
@@ -204,359 +233,355 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        // ❗️عند السكريتير نخفي الهيدر الداخلي حتى في حالة الخطأ
+        appBar: widget.hideInnerHeader
+            ? null
+            : AppBar(title: const Text("إعدادات التوقيت")),
+        body: Center(child: Text(_error!)),
+      );
+    }
+
+    final doctorId = _resolvedDoctorId!;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("إعدادات التوقيت")),
-      body: doctorId == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      // ❗️لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير
+      appBar: widget.hideInnerHeader
+          ? null
+          : AppBar(title: const Text("إعدادات التوقيت")),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ---------------------------
+          // مدة الفحص الطبي (Slot Duration)
+          // ---------------------------
+          Card(
+            child: Padding(
               padding: const EdgeInsets.all(16),
-              children: [
-                // ---------------------------
-                // مدة الفحص الطبي (Slot Duration)
-                // ---------------------------
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "مدة الفحص الطبي (Slot Duration)",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // تنبيه لطيف في حال لا توجد قيمة مفعّلة
-                        if (slotDuration == null)
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: scheme.secondaryContainer.withOpacity(.20),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              "لم يتم تحديد مدة الفحص بعد",
-                              style: TextStyle(
-                                color: scheme.onSecondaryContainer,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-
-                        // الشيبس (اختيار مؤقّت Tonal + مفعّل ✔)
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [10, 15, 20, 25, 30].map((v) {
-                            final bool isActive = slotDuration == v; // ✔
-                            final bool isTentative =
-                                selectedSlot == v && !isActive; // Tonal
-
-                            final Color bgColor = isActive
-                                ? scheme.primary.withOpacity(.16)
-                                : (isTentative
-                                      ? scheme.secondaryContainer.withOpacity(
-                                          .35,
-                                        )
-                                      : scheme.surfaceContainerHighest
-                                            .withOpacity(.30));
-
-                            final Color fgColor = isActive
-                                ? scheme.primary
-                                : (isTentative
-                                      ? scheme.onSecondaryContainer
-                                      : scheme.onSurfaceVariant);
-
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              curve: Curves.easeOut,
-                              decoration: BoxDecoration(
-                                color: bgColor,
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: ChoiceChip(
-                                selected: isActive,
-                                showCheckmark: false,
-                                onSelected: (picked) {
-                                  if (!picked) return;
-                                  if (!mounted) return;
-                                  setState(() {
-                                    selectedSlot = v; // اختيار مؤقّت فقط
-                                  });
-                                },
-                                label: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isActive) ...[
-                                      Icon(
-                                        Icons.check_circle,
-                                        size: 18,
-                                        color: scheme.primary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                    ] else if (isTentative) ...[
-                                      Icon(
-                                        Icons.schedule,
-                                        size: 18,
-                                        color: scheme.onSecondaryContainer,
-                                      ),
-                                      const SizedBox(width: 6),
-                                    ],
-                                    Text(
-                                      "$v دقيقة",
-                                      style: TextStyle(
-                                        color: fgColor,
-                                        fontWeight: isActive
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                backgroundColor: Colors.transparent,
-                                selectedColor: Colors.transparent,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // زر تفعيل — يحفظ المؤقّت ويجعله هو المعتمد ✔
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ElevatedButton.icon(
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text("تفعيل"),
-                            onPressed:
-                                (selectedSlot == null || doctorId == null)
-                                ? null
-                                : () async {
-                                    final v = selectedSlot!;
-                                    try {
-                                      await FirebaseFirestore.instance
-                                          .collection('doctors')
-                                          .doc(doctorId)
-                                          .set({
-                                            'slotDuration': v,
-                                          }, SetOptions(merge: true));
-
-                                      if (!mounted) return;
-                                      setState(() {
-                                        slotDuration =
-                                            v; // انتقال ✔ للقيمة الجديدة
-                                      });
-
-                                      await _updateFullDays();
-
-                                      if (!mounted) return;
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            "تم تفعيل مدة الفحص: $v دقيقة",
-                                          ),
-                                        ),
-                                      );
-                                    } catch (e) {
-                                      if (!mounted) return;
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text("تعذّر التفعيل: $e"),
-                                        ),
-                                      );
-                                    }
-                                  },
-                          ),
-                        ),
-                      ],
-                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "مدة الفحص الطبي (Slot Duration)",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                ),
+                  const SizedBox(height: 12),
 
-                const SizedBox(height: 20),
+                  // تنبيه لطيف في حال لا توجد قيمة مفعّلة
+                  if (slotDuration == null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: scheme.secondaryContainer.withOpacity(.20),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        "لم يتم تحديد مدة الفحص بعد",
+                        style: TextStyle(
+                          color: scheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
 
-                // ---------------------------
-                // النموذج الأسبوعي الأساسي
-                // ---------------------------
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "النموذج الأسبوعي الأساسي",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                  // الشيبس (اختيار مؤقّت Tonal + مفعّل ✔)
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [10, 15, 20, 25, 30].map((v) {
+                      final bool isActive = slotDuration == v; // ✔
+                      final bool isTentative =
+                          selectedSlot == v && !isActive; // Tonal
+
+                      final Color bgColor = isActive
+                          ? scheme.primary.withOpacity(.16)
+                          : (isTentative
+                                ? scheme.secondaryContainer.withOpacity(.35)
+                                : scheme.surfaceContainerHighest.withOpacity(
+                                    .30,
+                                  ));
+
+                      final Color fgColor = isActive
+                          ? scheme.primary
+                          : (isTentative
+                                ? scheme.onSecondaryContainer
+                                : scheme.onSurfaceVariant);
+
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: ChoiceChip(
+                          selected: isActive,
+                          showCheckmark: false,
+                          onSelected: (picked) {
+                            if (!picked) return;
+                            if (!mounted) return;
+                            setState(() => selectedSlot = v); // اختيار مؤقّت
+                          },
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isActive) ...[
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 18,
+                                  color: scheme.primary,
+                                ),
+                                const SizedBox(width: 6),
+                              ] else if (isTentative) ...[
+                                Icon(
+                                  Icons.schedule,
+                                  size: 18,
+                                  color: scheme.onSecondaryContainer,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                "$v دقيقة",
+                                style: TextStyle(
+                                  color: fgColor,
+                                  fontWeight: isActive
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.transparent,
+                          selectedColor: Colors.transparent,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Column(
-                          children: weekDays.map((day) {
-                            final d = weeklyTemplate[day]!;
-                            final available = d["available"] == true;
-                            return Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        day,
-                                        style: const TextStyle(fontSize: 16),
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: available,
-                                      onChanged: (v) {
-                                        if (!mounted) return;
-                                        setState(
-                                          () =>
-                                              weeklyTemplate[day]!["available"] =
-                                                  v,
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                if (available)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () async {
-                                              final t = await pickTime(
-                                                context,
-                                                d["start"],
-                                              );
-                                              if (t != null && mounted) {
-                                                setState(() => d["start"] = t);
-                                              }
-                                            },
-                                            child: _timeBox(
-                                              icon: Icons.access_time,
-                                              label: "بداية",
-                                              value: d["start"],
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () async {
-                                              final t = await pickTime(
-                                                context,
-                                                d["end"],
-                                              );
-                                              if (t != null && mounted) {
-                                                setState(() => d["end"] = t);
-                                              }
-                                            },
-                                            child: _timeBox(
-                                              icon: Icons.access_time,
-                                              label: "نهاية",
-                                              value: d["end"],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // زر تفعيل — يحفظ المؤقّت ويجعله هو المعتمد ✔
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check_circle),
+                      label: const Text("تفعيل"),
+                      onPressed: (selectedSlot == null)
+                          ? null
+                          : () async {
+                              final v = selectedSlot!;
+                              try {
+                                await FirebaseFirestore.instance
+                                    .collection('doctors')
+                                    .doc(doctorId)
+                                    .set({
+                                      'slotDuration': v,
+                                    }, SetOptions(merge: true));
+
+                                if (!mounted) return;
+                                setState(() {
+                                  slotDuration = v; // انتقال ✔ للقيمة الجديدة
+                                });
+
+                                await _updateFullDays();
+
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      "تم تفعيل مدة الفحص: $v دقيقة",
                                     ),
                                   ),
-                                const Divider(),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ],
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text("تعذّر التفعيل: $e")),
+                                );
+                              }
+                            },
                     ),
                   ),
-                ),
+                ],
+              ),
+            ),
+          ),
 
-                const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-                // ---------------------------
-                // تخصيص الأسابيع القادمة (21 يومًا)
-                // ---------------------------
-                const Text(
-                  "تخصيص الأسابيع القادمة (21 يومًا)",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-
-                Column(
-                  children: List.generate(weeks.length, (i) {
-                    final w = weeks[i];
-                    final startDate = DateTime.parse(
-                      w["startDate"].toString().trim(),
-                    );
-                    final days = w["days"] as List;
-                    final title =
-                        "الأسبوع ${i + 1} (${startDate.day}/${startDate.month})";
-                    return Card(
-                      child: ExpansionTile(
-                        title: Text(title),
-                        children: days.map<Widget>((d) {
-                          return ListTile(
-                            leading: d["full"] == true
-                                ? _redDot()
-                                : const SizedBox(),
-                            title: Text(d["date"]),
-                            subtitle: Text("من ${d["start"]} إلى ${d["end"]}"),
-                            trailing: Switch(
-                              value: d["available"] == true,
-                              onChanged: (v) {
-                                if (!mounted) return;
-                                setState(() => d["available"] = v);
-                              },
+          // ---------------------------
+          // النموذج الأسبوعي الأساسي
+          // ---------------------------
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "النموذج الأسبوعي الأساسي",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Column(
+                    children: weekDays.map((day) {
+                      final d = weeklyTemplate[day]!;
+                      final available = d["available"] == true;
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  day,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                              ),
+                              Switch(
+                                value: available,
+                                onChanged: (v) {
+                                  if (!mounted) return;
+                                  setState(
+                                    () => weeklyTemplate[day]!["available"] = v,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          if (available)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final t = await pickTime(
+                                          context,
+                                          d["start"],
+                                        );
+                                        if (t != null && mounted) {
+                                          setState(() => d["start"] = t);
+                                        }
+                                      },
+                                      child: _timeBox(
+                                        icon: Icons.access_time,
+                                        label: "بداية",
+                                        value: d["start"],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final t = await pickTime(
+                                          context,
+                                          d["end"],
+                                        );
+                                        if (t != null && mounted) {
+                                          setState(() => d["end"] = t);
+                                        }
+                                      },
+                                      child: _timeBox(
+                                        icon: Icons.access_time,
+                                        label: "نهاية",
+                                        value: d["end"],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          );
-                        }).toList(),
+                          const Divider(),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ---------------------------
+          // تخصيص الأسابيع القادمة (21 يومًا)
+          // ---------------------------
+          const Text(
+            "تخصيص الأسابيع القادمة (21 يومًا)",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+
+          Column(
+            children: List.generate(weeks.length, (i) {
+              final w = weeks[i];
+              final startDate = DateTime.parse(
+                w["startDate"].toString().trim(),
+              );
+              final days = w["days"] as List;
+              final title =
+                  "الأسبوع ${i + 1} (${startDate.day}/${startDate.month})";
+              return Card(
+                child: ExpansionTile(
+                  title: Text(title),
+                  children: days.map<Widget>((d) {
+                    return ListTile(
+                      leading: d["full"] == true ? _redDot() : const SizedBox(),
+                      title: Text(d["date"]),
+                      subtitle: Text("من ${d["start"]} إلى ${d["end"]}"),
+                      trailing: Switch(
+                        value: d["available"] == true,
+                        onChanged: (v) {
+                          if (!mounted) return;
+                          setState(() => d["available"] = v);
+                        },
                       ),
                     );
-                  }),
+                  }).toList(),
                 ),
+              );
+            }),
+          ),
 
-                const SizedBox(height: 30),
+          const SizedBox(height: 30),
 
-                // ---------------------------
-                // حفظ الإعدادات
-                // ---------------------------
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await _saveDoctorSchedule();
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("تم حفظ الإعدادات بنجاح")),
-                      );
-                    },
-                    icon: const Icon(Icons.save),
-                    label: const Text("حفظ الإعدادات"),
-                  ),
-                ),
-              ],
+          // ---------------------------
+          // حفظ الإعدادات
+          // ---------------------------
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                await _saveDoctorSchedule();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("تم حفظ الإعدادات بنجاح")),
+                );
+              },
+              icon: const Icon(Icons.save),
+              label: const Text("حفظ الإعدادات"),
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -593,7 +618,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   }
 
   Future<void> _saveDoctorSchedule() async {
+    final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
+
     await FirebaseFirestore.instance.collection('doctors').doc(doctorId).set({
       "slotDuration": slotDuration, // ✅ نحفظ المفعّلة (ليست المؤقّتة)
       "weeklyTemplate": weeklyTemplate,

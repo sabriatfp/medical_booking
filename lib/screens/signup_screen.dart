@@ -34,7 +34,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
 
     try {
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -42,8 +45,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         password: password.text,
       );
 
-      final usersRef =
-          FirebaseFirestore.instance.collection('users').doc(cred.user!.uid);
+      final usersRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(cred.user!.uid);
 
       final baseData = {
         'name': name.text.trim(),
@@ -68,18 +72,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (!mounted) return;
 
-// بعد إنشاء حساب المريض، انتقل مباشرة إلى HomeScreen
-Navigator.pushAndRemoveUntil(
-  context,
-  MaterialPageRoute(builder: (_) => const HomeScreen()),
-  (route) => false,
-); // AuthGate سيوجهك حسب الدور
+      // بعد إنشاء حساب المريض، انتقل مباشرة إلى HomeScreen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      ); // AuthGate سيوجهك حسب الدور
     } on FirebaseAuthException catch (e) {
       final msg = switch (e.code) {
-        'invalid-email'        => 'البريد الإلكتروني غير صالح',
+        'invalid-email' => 'البريد الإلكتروني غير صالح',
         'email-already-in-use' => 'هذا البريد مستخدم مسبقًا',
-        'weak-password'        => 'كلمة المرور ضعيفة (6 أحرف على الأقل)',
-        _                      => 'خطأ: ${e.message}',
+        'weak-password' => 'كلمة المرور ضعيفة (6 أحرف على الأقل)',
+        _ => 'خطأ: ${e.message}',
       };
       setState(() => error = msg);
     } catch (e) {
@@ -90,10 +94,10 @@ Navigator.pushAndRemoveUntil(
   }
 
   InputDecoration _dec(String label, IconData icon) => InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        border: const OutlineInputBorder(),
-      );
+    labelText: label,
+    prefixIcon: Icon(icon),
+    border: const OutlineInputBorder(),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -116,8 +120,9 @@ Navigator.pushAndRemoveUntil(
                       TextFormField(
                         controller: name,
                         decoration: _dec('الاسم الكامل', Icons.badge),
-                        validator: (v) =>
-                            (v == null || v.trim().length < 3) ? 'أدخل اسمًا صحيحًا' : null,
+                        validator: (v) => (v == null || v.trim().length < 3)
+                            ? 'أدخل اسمًا صحيحًا'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -135,8 +140,9 @@ Navigator.pushAndRemoveUntil(
                         controller: password,
                         decoration: _dec('كلمة المرور (6+ أحرف)', Icons.lock),
                         obscureText: true,
-                        validator: (v) =>
-                            (v == null || v.length < 6) ? 'أدخل 6 أحرف على الأقل' : null,
+                        validator: (v) => (v == null || v.length < 6)
+                            ? 'أدخل 6 أحرف على الأقل'
+                            : null,
                       ),
                       if (isPatient) ...[
                         const SizedBox(height: 12),
@@ -144,8 +150,9 @@ Navigator.pushAndRemoveUntil(
                           controller: phone,
                           decoration: _dec('رقم الهاتف', Icons.phone),
                           keyboardType: TextInputType.phone,
-                          validator: (v) =>
-                              (v == null || v.trim().length < 6) ? 'أدخل رقم هاتف صحيح' : null,
+                          validator: (v) => (v == null || v.trim().length < 6)
+                              ? 'أدخل رقم هاتف صحيح'
+                              : null,
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -159,8 +166,12 @@ Navigator.pushAndRemoveUntil(
                           icon: const Icon(Icons.person_add),
                           label: loading
                               ? const SizedBox(
-                                  width: 20, height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
                                 )
                               : const Text('إنشاء الحساب'),
                         ),

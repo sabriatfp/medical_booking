@@ -20,6 +20,7 @@ dependencies:
   # إشعارات محلية فقط (بدون FCM حالياً)
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.2
+  qr_flutter: ^4.1.0
 
   # =========================
   # 🔥 Firebase (سلسلة core 2.x متوافقة)

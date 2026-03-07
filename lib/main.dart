@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
+import 'app/splash_router.dart'; // ✅ NEW
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
@@ -29,39 +30,14 @@ class MyApp extends StatelessWidget {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('ar'), Locale('en')],
 
-      // 👇 نخلي AuthGate هو البوابة الرئيسية
-      home: const AuthGate(),
+      // 👇 نخلّي SplashRouter هو البوابة الرئيسية بدل AuthGate
+      home: const SplashRouter(),
 
-      // 👇 نضيف تعريف الصفحات بالاسم
+      // 👇 مساراتك المعتادة
       routes: {
         '/login': (context) => const LoginScreen(),
-        '/signup': (context) =>
-            const SignUpScreen(role: 'patient'), // ✅ مهم جدًا
+        '/signup': (context) => const SignUpScreen(role: 'patient'),
         '/home': (context) => const HomeScreen(),
-      },
-    );
-  }
-}
-
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snapshot.hasData) {
-          return const HomeScreen(); // المستخدم مسجل دخول
-        }
-
-        return const LoginScreen(); // مش مسجل دخول
       },
     );
   }
