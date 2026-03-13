@@ -21,7 +21,7 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
   int confirmedAppointments = 0;
   int cancelledAppointments = 0;
 
-  Map<String, dynamic>? doctorData;
+  Map<String, dynamic>? userData; // ← مصدر الاشتراك الجديد
 
   @override
   void initState() {
@@ -37,25 +37,22 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
       return;
     }
 
+    // 1) جلب وثيقة المستخدم (users/{uid})
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .get();
 
-    doctorId = userDoc.data()?['doctorId'];
+    userData = userDoc.data();
+
+    doctorId = userData?['doctorId'];
 
     if (doctorId == null) {
       setState(() => loading = false);
       return;
     }
 
-    final doctorSnap = await FirebaseFirestore.instance
-        .collection('doctors')
-        .doc(doctorId)
-        .get();
-
-    doctorData = doctorSnap.data();
-
+    // 2) إعادة تهيئة القيم
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
 
@@ -65,6 +62,7 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
     confirmedAppointments = 0;
     cancelledAppointments = 0;
 
+    // 3) قراءة المواعيد الخاصة بالطبيب وحساب الملخّص
     final snap = await FirebaseFirestore.instance
         .collection('appointments')
         .where('doctorId', isEqualTo: doctorId)
@@ -73,26 +71,34 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
     for (var doc in snap.docs) {
       final data = doc.data();
 
-      final status = data['status'] ?? 'confirmed';
+      final rawStatus = (data['status'] ?? 'confirmed')
+          .toString()
+          .toLowerCase();
+      // دعم التهجئتين 'canceled' و 'cancelled'
+      final isCanceled = rawStatus == 'canceled' || rawStatus == 'cancelled';
+      final isConfirmed = rawStatus == 'confirmed';
 
       final price = (data['price'] is num)
           ? (data['price'] as num).toDouble()
           : 0.0;
 
+      // أغلب الشاشات لديك تعتمد على تاريخ كنص في الحقل 'date'
       final date = DateTime.tryParse(data['date'] ?? '');
 
       if (date == null) continue;
 
-      if (status == 'cancelled') {
+      if (isCanceled) {
         cancelledAppointments++;
         continue;
       }
 
-      if (status == 'confirmed') {
+      if (isConfirmed) {
         confirmedAppointments++;
         totalRevenue += price;
 
-        if (date.year == now.year && date.month == now.month) {
+        if (date.isAfter(firstDayOfMonth.subtract(const Duration(days: 1))) &&
+            date.month == now.month &&
+            date.year == now.year) {
           monthlyRevenue += price;
         }
 
@@ -201,12 +207,12 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
               const SizedBox(height: 30),
 
               /// =======================
-              /// 🧾 الاشتراك
+              /// 🧾 الاشتراك (من users/{uid})
               /// =======================
               _sectionTitle("الاشتراك"),
               const SizedBox(height: 12),
 
-              _subscriptionCard(),
+              _subscriptionCard(), // ← الآن يقرأ من userData
 
               const SizedBox(height: 30),
 
@@ -271,7 +277,6 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
 
   Widget _successRateCard() {
     final total = confirmedAppointments + cancelledAppointments;
-
     final rate = total == 0 ? 0 : (confirmedAppointments / total) * 100;
 
     return Card(
@@ -295,19 +300,27 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
     );
   }
 
+  /// بطاقة الاشتراك — الآن من users/{uid}
   Widget _subscriptionCard() {
     final now = DateTime.now();
 
-    DateTime? subscriptionEnd = (doctorData?['subscriptionEnd'] as Timestamp?)
-        ?.toDate();
+    // قراءة الحقول من وثيقة المستخدم
+    final active = (userData?['subscriptionActive'] ?? false) == true;
+    final Timestamp? subEndTs = userData?['subscriptionEnd'] as Timestamp?;
+    final DateTime? subscriptionEnd = subEndTs?.toDate();
 
-    DateTime? trialEnd = (doctorData?['trialEnd'] as Timestamp?)?.toDate();
+    final Timestamp? trialTs = userData?['trialEnd'] as Timestamp?;
+    final DateTime? trialEnd = trialTs?.toDate();
 
     String status;
     Color color;
     DateTime? endDate;
 
-    if (subscriptionEnd != null && subscriptionEnd.isAfter(now)) {
+    // منطق الحالة:
+    // 1) إن كان active=true و subscriptionEnd في المستقبل ⇒ نشط
+    // 2) وإلا إن كان trialEnd في المستقبل ⇒ تجريبي
+    // 3) غير ذلك ⇒ منتهي
+    if (active && subscriptionEnd != null && subscriptionEnd.isAfter(now)) {
       status = "نشط";
       color = Colors.green;
       endDate = subscriptionEnd;
@@ -322,6 +335,12 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
 
     final daysLeft = endDate != null ? endDate.difference(now).inDays : 0;
 
+    // شارة تنبيه في حالة اقتراب الانتهاء
+    final bool expiringSoon =
+        endDate != null &&
+        endDate.isAfter(now) &&
+        endDate.difference(now).inDays <= 7;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -329,6 +348,29 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
         padding: const EdgeInsets.all(18),
         child: Column(
           children: [
+            if (expiringSoon)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 12,
+                ),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text("ينتهي الاشتراك قريبًا — يُنصح بالتجديد."),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -342,13 +384,19 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
             const SizedBox(height: 10),
             if (endDate != null)
               Text("ينتهي في: ${DateFormat('yyyy-MM-dd').format(endDate)}"),
-            if (daysLeft > 0) Text("متبقي $daysLeft يوم"),
+            if (endDate != null && endDate.isAfter(now) && daysLeft > 0)
+              Text("متبقي $daysLeft يوم"),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  // لاحقاً بوابة الدفع
+                  // لاحقًا: ربط بوابة الدفع أو إرسال طلب للأدمن
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("سيتم إضافة بوابة الدفع لاحقًا."),
+                    ),
+                  );
                 },
                 child: const Text("تجديد الاشتراك"),
               ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'app/splash_router.dart'; // ✅ NEW
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
@@ -10,6 +10,13 @@ import 'screens/home_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  // 👇 تعطيل الكاش مؤقتًا أثناء التشخيص
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: false,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
   runApp(const MyApp());
 }
 

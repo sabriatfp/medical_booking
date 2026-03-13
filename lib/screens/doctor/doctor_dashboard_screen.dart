@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,7 +14,7 @@ class DoctorDashboardScreen extends StatefulWidget {
   final String? doctorId;
   final bool asSecretary;
 
-  /// NEW: إخفاء الهيدر الداخلي (العنوان + السهم) داخل فضاء السكريتير
+  /// إخفاء الهيدر الداخلي عندما تكون الشاشة مضمّنة في فضاء السكريتير
   final bool hideInnerHeader;
 
   const DoctorDashboardScreen({
@@ -34,10 +36,20 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
   bool _loading = true;
   String? _error;
 
+  // تشخيص انتظار الـ Stream
+  Timer? _waitTimer;
+  bool _streamWaitingTooLong = false;
+
   @override
   void initState() {
     super.initState();
     _resolveDoctorId();
+  }
+
+  @override
+  void dispose() {
+    _waitTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _resolveDoctorId() async {
@@ -49,8 +61,13 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
       }
       if (_resolvedDoctorId == null || _resolvedDoctorId!.isEmpty) {
         _error = 'لم يتم ربط الحساب بطبيب';
+      } else {
+        debugPrint(
+          '👨‍⚕️ DOCTOR DASH → doctorId=$_resolvedDoctorId, asSecretary=${widget.asSecretary}',
+        );
       }
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('❌ ERROR resolving doctorId → $e\n$st');
       _error = 'خطأ أثناء تحديد الطبيب';
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -73,10 +90,66 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
 
   Future<void> _callNumber(String phone) async {
     final cleaned = phone.trim();
-    if (cleaned.isEmpty) return;
+    if (cleaned.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('رقم الهاتف غير متوفر')));
+      return;
+    }
     final uri = Uri(scheme: 'tel', path: cleaned);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تعذر فتح تطبيق الاتصال')));
+    }
+  }
+
+  /// اختبار مباشر للاستعلام خارج الـ Stream لمعرفة:
+  /// - هل القواعد تمنع القراءة (permission-denied)؟
+  /// - هل لا توجد بيانات؟
+  Future<void> _testQuery(String doctorId, String? status) async {
+    try {
+      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+          .collection('appointments')
+          .where('doctorId', isEqualTo: doctorId);
+
+      if (status != null) {
+        q = q.where('status', isEqualTo: status);
+      }
+
+      // ملاحظة: إذا كان اسم الحقل في بياناتك مختلف (مثل scheduledAt)، عدّل السطر أدناه:
+      q = q.orderBy('dateTime'); // <-- عدّل إلى 'scheduledAt' إذا لزم
+
+      final snap = await q.get();
+      debugPrint(
+        '🔎 TEST GET → ${snap.docs.length} docs (doctorId=$doctorId, status=$status)',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('قراءة مباشرة: ${snap.docs.length} عنصر')),
+      );
+    } on FirebaseException catch (e) {
+      debugPrint('❌ TEST GET FIREBASE ERROR → ${e.code} ${e.message}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'permission-denied'
+                ? 'صلاحيات غير كافية لقراءة المواعيد (permission-denied).'
+                : 'خطأ Firebase: ${e.code}',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ TEST GET ERROR → $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('خطأ غير متوقع أثناء الاختبار')),
+      );
     }
   }
 
@@ -87,15 +160,15 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     }
     if (_error != null) {
       return Scaffold(
-        // ❗️لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير
         appBar: widget.hideInnerHeader ? null : AppBar(title: _appBarTitle()),
         body: Center(child: Text(_error!)),
       );
     }
 
     final doctorId = _resolvedDoctorId!;
+    final currentStatus = _statusFromFilter();
+
     return Scaffold(
-      // ❗️لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير (AppBar الرئيسي موجود في سكرتير داشبورد)
       appBar: widget.hideInnerHeader ? null : AppBar(title: _appBarTitle()),
       body: Column(
         children: [
@@ -105,20 +178,41 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _doctorService.appointmentsStream(
                 doctorId,
-                _statusFromFilter(),
+                currentStatus,
               ),
               builder: (context, snapshot) {
+                // إدارة مؤقت الانتظار الطويل
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  _startWaitTimer(doctorId, currentStatus);
+                } else {
+                  _cancelWaitTimer();
+                }
+
                 if (snapshot.hasError) {
-                  return const Center(child: Text('خطأ في تحميل المواعيد'));
+                  debugPrint('❌ APPTS STREAM ERROR → ${snapshot.error}');
+                  return _errorView(
+                    message: 'خطأ في تحميل المواعيد',
+                    onTryDirectRead: () => _testQuery(doctorId, currentStatus),
+                  );
                 }
 
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return _waitingView(
+                    isTakingLong: _streamWaitingTooLong,
+                    onTryDirectRead: () => _testQuery(doctorId, currentStatus),
+                  );
                 }
 
                 final docs = snapshot.data!.docs;
+                debugPrint(
+                  '📦 APPTS SNAP(${currentStatus ?? "all"}) → ${docs.length} docs',
+                );
+
                 if (docs.isEmpty) {
-                  return const Center(child: Text('لا توجد مواعيد'));
+                  return _emptyView(
+                    message: 'لا توجد مواعيد',
+                    onTryDirectRead: () => _testQuery(doctorId, currentStatus),
+                  );
                 }
 
                 return ListView.builder(
@@ -129,7 +223,8 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
 
                     // التاريخ/الوقت
                     DateTime? dt;
-                    final dtAny = d['dateTime'];
+                    final dtAny =
+                        d['dateTime']; // <-- عدّل لاسم الحقل إذا لزم (scheduledAt)
                     if (dtAny is Timestamp) {
                       dt = dtAny.toDate();
                     }
@@ -239,7 +334,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                               }
                             } on FirebaseException catch (e) {
                               debugPrint(
-                                'APPT UPDATE ERROR: ${e.code} ${e.message}',
+                                '❌ APPT UPDATE ERROR: ${e.code} ${e.message}',
                               );
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -253,7 +348,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                                 );
                               }
                             } catch (e) {
-                              debugPrint('APPT UPDATE ERROR: $e');
+                              debugPrint('❌ APPT UPDATE ERROR: $e');
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -264,7 +359,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                             }
                           },
                           itemBuilder: (_) {
-                            // ✅ نفس الخيارات للطبيب والسكرتير، مع إخفاء ما لا ينطبق على الحالة
                             final items = <PopupMenuEntry<String>>[];
                             if (canConfirm) {
                               items.add(
@@ -308,6 +402,75 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
+  // ---------- واجهات مساعدة (انتظار/خطأ/لا بيانات) ----------
+
+  Widget _waitingView({
+    required bool isTakingLong,
+    required VoidCallback onTryDirectRead,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 12),
+          Text(
+            isTakingLong
+                ? 'تأخر التحميل. تحقق من الاتصال أو الصلاحيات.'
+                : 'جارٍ تحميل المواعيد...',
+          ),
+          if (isTakingLong) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onTryDirectRead,
+              child: const Text('تجربة قراءة مباشرة'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _errorView({
+    required String message,
+    required VoidCallback onTryDirectRead,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(message),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onTryDirectRead,
+            child: const Text('تجربة قراءة مباشرة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyView({
+    required String message,
+    required VoidCallback onTryDirectRead,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(message),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onTryDirectRead,
+            child: const Text('تحديث / تجربة قراءة مباشرة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- AppBar + فلاتر ----------
+
   Text _appBarTitle() {
     return Text(widget.asSecretary ? 'لوحة الطبيب' : 'لوحة الطبيب');
   }
@@ -333,5 +496,27 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
         onSelected: (_) => setState(() => _filter = value),
       ),
     );
+  }
+
+  // ---------- إدارة مؤقت الانتظار الطويل ----------
+
+  void _startWaitTimer(String doctorId, String? status) {
+    if (_waitTimer != null) return; // مؤقت قائم بالفعل
+    _streamWaitingTooLong = false;
+    _waitTimer = Timer(const Duration(seconds: 12), () {
+      if (!mounted) return;
+      setState(() => _streamWaitingTooLong = true);
+      debugPrint('⏳ STREAM WAIT TOO LONG (doctorId=$doctorId, status=$status)');
+    });
+  }
+
+  void _cancelWaitTimer() {
+    if (_waitTimer != null) {
+      _waitTimer!.cancel();
+      _waitTimer = null;
+    }
+    if (_streamWaitingTooLong) {
+      setState(() => _streamWaitingTooLong = false);
+    }
   }
 }

@@ -46,7 +46,11 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
         label: 'مواعيد اليوم',
         icon: Icons.today_outlined,
         // AppointmentsTodayScreen غالبًا بدون هيدر داخلي، نتركها كما هي
-        builder: () => AppointmentsTodayScreen(doctorId: widget.doctorId),
+        builder: () => AppointmentsTodayScreen(
+          doctorId: widget.doctorId,
+          asSecretary: true,
+          hideInnerHeader: true,
+        ),
       ),
       _Tab(
         label: 'الرزنامة',
@@ -66,6 +70,7 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
           hideInnerHeader: true, // مهم لإخفاء العنوان والسهم
         ),
       ),
+
       _Tab(
         label: 'أيام العطل',
         icon: Icons.beach_access_rounded,

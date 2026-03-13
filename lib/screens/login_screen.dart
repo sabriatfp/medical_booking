@@ -1,11 +1,113 @@
+import 'dart:async'; // غير ضرورية هنا
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'home_screen.dart';
+// 🔁 CHANGED: لن نوجّه مباشرة لـ HomeScreen بعد الآن
+// import 'home_screen.dart'; // 🧹 CLEANUP: لم نعد نستخدمه هنا
+import '../features/auth/ui/splash_wrapper.dart';
+
 import 'role_selection_screen.dart';
 // شاشة إدخال كود السكريتير (جديدة)
 import 'package:medical_booking/features/secretary/ui/secretary_code_screen.dart';
+import 'package:medical_booking/features/admin/ui/admin_login_screen.dart';
+
+/// ------------------------------
+/// SecretMultiTap ...
+/// ------------------------------
+class SecretMultiTap extends StatefulWidget {
+  final Widget child;
+  final int requiredTaps;
+  final int windowInSeconds;
+  final VoidCallback onUnlocked;
+  final bool hapticOnEachTap;
+  final Duration flashDuration;
+
+  const SecretMultiTap({
+    super.key,
+    required this.child,
+    required this.onUnlocked,
+    this.requiredTaps = 5,
+    this.windowInSeconds = 3,
+    this.hapticOnEachTap = true,
+    this.flashDuration = const Duration(milliseconds: 120),
+  });
+
+  @override
+  State<SecretMultiTap> createState() => _SecretMultiTapState();
+}
+
+class _SecretMultiTapState extends State<SecretMultiTap> {
+  int _tapCount = 0;
+  Timer? _resetTimer;
+
+  bool _dim = false;
+  Timer? _flashTimer;
+
+  void _flashOnce() {
+    setState(() => _dim = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(widget.flashDuration, () {
+      if (mounted) setState(() => _dim = false);
+    });
+  }
+
+  void _handleTap() {
+    if (widget.hapticOnEachTap) {
+      try {
+        HapticFeedback.selectionClick();
+      } catch (_) {}
+    }
+
+    _flashOnce();
+
+    if (_tapCount == 0) {
+      _resetTimer?.cancel();
+      _resetTimer = Timer(Duration(seconds: widget.windowInSeconds), () {
+        if (mounted) {
+          setState(() {
+            _tapCount = 0;
+          });
+        }
+      });
+    }
+
+    setState(() {
+      _tapCount++;
+    });
+
+    if (_tapCount >= widget.requiredTaps) {
+      _resetTimer?.cancel();
+      _resetTimer = null;
+      _tapCount = 0;
+
+      widget.onUnlocked();
+    }
+  }
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    _flashTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final flickerChild = AnimatedOpacity(
+      duration: widget.flashDuration,
+      opacity: _dim ? 0.7 : 1.0,
+      child: widget.child,
+    );
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _handleTap,
+      child: flickerChild,
+    );
+  }
+}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -41,8 +143,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final uid = cred.user!.uid;
-
-      // جلب بيانات المستخدم من Firestore لتحديد الدور (إن لزم)
+      // 🧹 CLEANUP: ليس ضرورياً هنا؛ SplashWrapper سيقرأ users/{uid} ويقرر الوجهة
+      // إذا أردت فقط التحقق من وجود الوثيقة دون استخدامها يمكنك الإبقاء على السطور التالية:
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -53,9 +155,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!mounted) return;
+
+      // 🔁 CHANGED: وجّه دائمًا إلى SplashWrapper (هو الذي يرسل Doctor/Patient إلى HomeScreen المشتركة)
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const SplashWrapper()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
@@ -65,6 +169,12 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  void _openAdminLogin() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AdminLoginScreen()));
   }
 
   @override
@@ -79,13 +189,30 @@ class _LoginScreenState extends State<LoginScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.local_hospital, size: 80, color: Colors.teal),
+                // --- اللوجو: منطقة النقر السرّية ---
+                Center(
+                  child: SecretMultiTap(
+                    requiredTaps: 5,
+                    windowInSeconds: 3,
+                    hapticOnEachTap: true,
+                    onUnlocked: _openAdminLogin,
+                    child: const Icon(
+                      Icons.local_hospital,
+                      size: 80,
+                      color: Colors.teal,
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 20),
 
                 // البريد وكلمة المرور
                 TextField(
                   controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textDirection: TextDirection.ltr,
                   decoration: const InputDecoration(
                     labelText: "البريد الإلكتروني",
                     border: OutlineInputBorder(),
@@ -102,17 +229,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // أخطاء تسجيل دخول العادي
                 if (error != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       error!,
                       style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.right,
                     ),
                   ),
 
-                // زر دخول العادي
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -132,7 +258,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 12),
 
-                // إنشاء حساب جديد
                 TextButton(
                   onPressed: () {
                     Navigator.push(
@@ -149,7 +274,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 const Divider(),
                 const SizedBox(height: 8),
 
-                // زر فضاء السكريتير → يفتح شاشة إدخال الكود المستقلة
                 Align(
                   alignment: Alignment.centerRight,
                   child: OutlinedButton.icon(
@@ -182,3 +306,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
+/// ------------------------------
+/// Placeholder للأدمن ... (كما هو)
+/// ------------------------------

@@ -73,13 +73,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // جلب اسم الطبيب إذا وُجد
     if (isDoctor && doctorId != null) {
-      final doctorSnap = await FirebaseFirestore.instance
-          .collection('doctors')
-          .doc(doctorId)
-          .get();
-      doctorName = doctorSnap.data()?['name'];
-    }
+      try {
+        final doctorSnap = await FirebaseFirestore.instance
+            .collection('doctors')
+            .doc(doctorId)
+            .get();
 
+        if (doctorSnap.exists) {
+          doctorName = (doctorSnap.data()?['name'] ?? '').toString();
+        } else {
+          debugPrint('ℹ️ HomeScreen: doctors/$doctorId does not exist.');
+        }
+      } on FirebaseException catch (e) {
+        debugPrint('❌ HomeScreen doctor read error: ${e.code} ${e.message}');
+        // لا تنهار الواجهة—اعرض اسم افتراضي واستمر
+        doctorName = null; // سنعرض "طبيب" افتراضياً
+        if (mounted && e.code == 'permission-denied') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تعذّر تحميل ملف الطبيب بسبب الصلاحيات'),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('❌ HomeScreen doctor read unexpected error: $e');
+        doctorName = null;
+      }
+    }
     if (mounted) setState(() => loading = false);
   }
 

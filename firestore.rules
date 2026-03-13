@@ -1,0 +1,320 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // ============ دوال مساعدة عامة ============
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(db)/documents/users/$(uid));
+    }
+
+    function userRole(uid) {
+      return isSignedIn() ? userDoc(uid).data.role : null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole(request.auth.uid) == 'admin';
+    }
+
+    function isDoctor(uid) {
+      return userRole(uid) == 'doctor';
+    }
+
+    function isSecretary(uid) {
+      return userRole(uid) == 'secretary';
+    }
+
+    function isPatient(uid) {
+      return userRole(uid) == 'patient';
+    }
+
+    // قبول serverTimestamp بدون رفض (سماح مرن)
+    function isServerTimestamp(value) {
+      return true;
+    }
+
+    // ============ users/{uid} ============
+    match /users/{uid} {
+
+      // القراءة:
+      // - صاحب الوثيقة (get فقط)
+      // - الأدمن (get + list)
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      // الإنشاء: المستخدم لنفسه عند التسجيل الأول (اختياري)
+      allow create: if isSignedIn() && request.auth.uid == uid;
+
+      // تحديث بواسطة نفس المستخدم: الحقول غير الحساسة فقط
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'photoUrl',
+          'phone',
+          'fcmTokens',
+          'lastLoginAt'
+        ]);
+
+      // تحديث بواسطة الأدمن: الحقول الخاصة بالاشتراك فقط
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'subscriptionActive',
+          'subscriptionPlan',
+          'subscriptionEnd',
+          'subscriptionUpdatedAt'
+        ])
+        && (
+          (!request.resource.data.keys().hasAny(['subscriptionActive']) || request.resource.data.subscriptionActive is bool) &&
+          (!request.resource.data.keys().hasAny(['subscriptionPlan'])   || request.resource.data.subscriptionPlan   is string) &&
+          (!request.resource.data.keys().hasAny(['subscriptionEnd'])    || request.resource.data.subscriptionEnd    is timestamp || isServerTimestamp(request.resource.data.subscriptionEnd)) &&
+          (!request.resource.data.keys().hasAny(['subscriptionUpdatedAt']) || request.resource.data.subscriptionUpdatedAt is timestamp || isServerTimestamp(request.resource.data.subscriptionUpdatedAt))
+        );
+
+      // الحذف: الأدمن فقط (إن رغبت بمنعه تمامًا احذِف هذا السطر)
+      allow delete: if isAdmin();
+    }
+
+    // ============ secretary_sessions ============
+    // تتحقق من جلسة سكريتير فعّالة لطبيب معيّن.
+    function hasActiveSecretarySession(doctorId) {
+      // السيناريو A: docId = secretaryUid
+      let pathA = /databases/$(db)/documents/secretary_sessions/$(request.auth.uid);
+      let okA = exists(pathA)
+                && get(pathA).data.active == true
+                && get(pathA).data.doctorId == doctorId;
+
+      // السيناريو B: docId مركّب "secUid_doctorId"
+      let composedId = request.auth.uid + "_" + doctorId;
+      let pathB = /databases/$(db)/documents/secretary_sessions/$(composedId);
+      let okB = exists(pathB) && get(pathB).data.active == true;
+
+      return okA || okB;
+    }
+
+    match /secretary_sessions/{sessionId} {
+
+      // القراءة:
+      // - الأدمن
+      // - السكريتير صاحب الجلسة (إن كان الـ docId يبدأ بـ uid الخاص به)
+      allow get, list: if isAdmin()
+        || (isSignedIn() && isSecretary(request.auth.uid) &&
+            (sessionId == request.auth.uid || sessionId.startsWith(request.auth.uid + "_")));
+
+      // الإنشاء/التحديث/الحذف:
+      // - الأدمن دائمًا
+      // - السكريتير لنفسه فقط (حسب sessionId) وبحدود الحقول المسموحة
+      allow create, update, delete: if isAdmin()
+        || (
+          isSignedIn() && isSecretary(request.auth.uid) &&
+          (sessionId == request.auth.uid || sessionId.startsWith(request.auth.uid + "_")) &&
+          // قيود الحقول
+          request.resource.data.keys().hasOnly([
+            'secretaryUid',
+            'doctorId',
+            'active',
+            'startedAt',
+            'endedAt',
+            'updatedAt'
+          ]) &&
+          request.resource.data.secretaryUid == request.auth.uid &&
+          (userDoc(request.auth.uid).data.role == 'secretary') &&
+          (!request.resource.data.keys().hasAny(['doctorId']) || isDoctor(request.resource.data.doctorId)) &&
+          (
+            !request.resource.data.keys().hasAny(['startedAt']) || request.resource.data.startedAt is timestamp || isServerTimestamp(request.resource.data.startedAt)
+          ) &&
+          (
+            !request.resource.data.keys().hasAny(['endedAt']) || request.resource.data.endedAt is timestamp || isServerTimestamp(request.resource.data.endedAt)
+          ) &&
+          (
+            !request.resource.data.keys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp || isServerTimestamp(request.resource.data.updatedAt)
+          ) &&
+          (
+            !request.resource.data.keys().hasAny(['active']) || request.resource.data.active is bool
+          )
+        );
+    }
+
+    // ============ appointments/{appointmentId} ============
+    // حالات المواعيد المسموح بها
+    function isValidAppointmentStatus(s) {
+      return s == 'pending' || s == 'confirmed' || s == 'cancelled' || s == 'checked_in' || s == 'no_show';
+    }
+
+    // انتقالات الحالة المسموحة
+    function allowedStatusTransition(prev, next) {
+      return
+        (prev == 'pending'   && (next == 'confirmed' || next == 'cancelled')) ||
+        (prev == 'confirmed' && (next == 'checked_in' || next == 'no_show' || next == 'cancelled')) ||
+        (prev == 'checked_in' && next == 'checked_in') ||
+        (prev == 'no_show'    && next == 'no_show') ||
+        (prev == next);
+    }
+
+    // هل المستخدم له علاقة بالموعِد (طبيب، سكريتير فعّال، أو المريض صاحب الموعد)
+    function isAppointmentActor(doctorId, patientId) {
+      return (isSignedIn() &&
+        (
+          request.auth.uid == patientId ||
+          request.auth.uid == doctorId  ||
+          hasActiveSecretarySession(doctorId) ||
+          isAdmin()
+        )
+      );
+    }
+
+    match /appointments/{appointmentId} {
+
+      // القراءة:
+      // - الأدمن يقرأ كل شيء
+      // - الطبيب يقرأ مواعيده (doctorId)
+      // - السكريتير (جلسة فعّالة) يقرأ مواعيد الطبيب المرتبط به
+      // - المريض يقرأ مواعيده الخاصة
+      allow get, list: if isAdmin()
+        || ( isSignedIn() && (
+              resource.data.doctorId == request.auth.uid
+              || hasActiveSecretarySession(resource.data.doctorId)
+              || resource.data.patientId == request.auth.uid
+            )
+          );
+
+      // الإنشاء:
+      // - المريض ينشئ موعدًا لنفسه فقط status=pending
+      // - الطبيب/السكرتير (جلسة فعّالة) يمكنهم الإنشاء للطبيب (status: pending أو confirmed)
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'doctorId',
+          'patientId',
+          'scheduledAt',
+          'status',
+          'createdAt',
+          'updatedAt',
+          'notes'
+        ])
+        && ( request.resource.data.doctorId is string )
+        && ( request.resource.data.patientId is string )
+        && ( request.resource.data.scheduledAt is timestamp || isServerTimestamp(request.resource.data.scheduledAt) )
+        && ( request.resource.data.createdAt  is timestamp || isServerTimestamp(request.resource.data.createdAt) )
+        && ( !request.resource.data.keys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp || isServerTimestamp(request.resource.data.updatedAt) )
+        && isValidAppointmentStatus(request.resource.data.status)
+        && (
+            // مريض ينشئ لنفسه فقط وحالة مبدئية "pending"
+            ( isPatient(request.auth.uid)
+              && request.resource.data.patientId == request.auth.uid
+              && request.resource.data.status == 'pending'
+            )
+            ||
+            // طبيب أو سكرتير (جلسة فعّالة) ينشئون موعدًا لطبيبهم
+            ( (request.auth.uid == request.resource.data.doctorId) || hasActiveSecretarySession(request.resource.data.doctorId) )
+          );
+
+      // التحديث:
+      // - الطبيب أو سكرتير (جلسة فعّالة) يعدّلان حالة الموعد فقط لذات doctorId
+      // - المريض يمكنه إلغاء موعده (status -> cancelled) فقط
+      // - الأدمن مسموح له بالتعديل لنفس الحقول
+      allow update: if isSignedIn()
+        && request.resource.data.doctorId == resource.data.doctorId // منع تغيير doctorId
+        && request.resource.data.patientId == resource.data.patientId // منع تغيير patientId
+        // الحقول المسموحة في التحديث
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'status',
+          'updatedAt',
+          'confirmedAt',
+          'cancelledAt',
+          'checkedInAt',
+          'noShowAt',
+          'statusNote',
+          'updatedBy'
+        ])
+        && isValidAppointmentStatus(request.resource.data.status)
+        && allowedStatusTransition(resource.data.status, request.resource.data.status)
+        && (
+          // 1) الطبيب أو سكرتير بجلسة فعّالة على هذا الطبيب أو أدمن
+          (request.auth.uid == resource.data.doctorId) || hasActiveSecretarySession(resource.data.doctorId) || isAdmin()
+          ||
+          // 2) المريض يلغي موعده فقط
+          ( request.auth.uid == resource.data.patientId
+            && resource.data.status != 'cancelled'
+            && request.resource.data.status == 'cancelled'
+          )
+        )
+        &&
+        // تحقق أنواع الطوابع الزمنية عند وجودها
+        ( !request.resource.data.keys().hasAny(['updatedAt'])   || request.resource.data.updatedAt   is timestamp || isServerTimestamp(request.resource.data.updatedAt) )
+        && ( !request.resource.data.keys().hasAny(['confirmedAt']) || request.resource.data.confirmedAt is timestamp || isServerTimestamp(request.resource.data.confirmedAt) )
+        && ( !request.resource.data.keys().hasAny(['cancelledAt']) || request.resource.data.cancelledAt is timestamp || isServerTimestamp(request.resource.data.cancelledAt) )
+        && ( !request.resource.data.keys().hasAny(['checkedInAt']) || request.resource.data.checkedInAt is timestamp || isServerTimestamp(request.resource.data.checkedInAt) )
+        && ( !request.resource.data.keys().hasAny(['noShowAt'])    || request.resource.data.noShowAt    is timestamp || isServerTimestamp(request.resource.data.noShowAt) );
+
+      // الحذف: الأدمن فقط
+      allow delete: if isAdmin();
+    }
+
+    // ============ reports/{reportId} ============
+    function isValidReportStatus(s) {
+      return s == 'open' || s == 'in_progress' || s == 'resolved' || s == 'closed';
+    }
+
+    match /reports/{reportId} {
+      // القراءة
+      allow get, list: if isAdmin() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+
+      // الإنشاء
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'createdBy',
+          'createdAt',
+          'type',
+          'message',
+          'attachments',
+          'status',
+          'targetDoctorId'
+        ])
+        && request.resource.data.createdBy == request.auth.uid
+        && ( request.resource.data.createdAt is timestamp || isServerTimestamp(request.resource.data.createdAt) )
+        && isValidReportStatus(request.resource.data.status);
+
+      // التحديث (الأدمن فقط)
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'status',
+          'resolution',
+          'updatedAt',
+          'assignedToUid'
+        ])
+        && isValidReportStatus(request.resource.data.status)
+        && (
+          !request.resource.data.keys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp || isServerTimestamp(request.resource.data.updatedAt)
+        );
+
+      // الحذف: الأدمن فقط
+      allow delete: if isAdmin();
+    }
+
+    // ===== doctors/{doctorId} =====
+    match /doctors/{doctorId} {
+      // القراءة (get فقط) للأطراف المصرح لهم
+      allow get: if isAdmin()
+        || ( isSignedIn() && (
+              // الطبيب صاحب الوثيقة
+              (userRole(request.auth.uid) == 'doctor' &&
+               userDoc(request.auth.uid).data.doctorId == doctorId
+              )
+              // سكرتير لديه جلسة فعّالة مع هذا الطبيب
+              || (userRole(request.auth.uid) == 'secretary' && hasActiveSecretarySession(doctorId))
+            )
+        );
+
+      // (اختياري) list: عادة لا نفتح list للأطباء على مجموعة doctors
+      // allow list: if isAdmin();
+
+      // الإنشاء/التحديث/الحذف: للأدمن فقط
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ============ مجموعات أخرى ============
+    // أضف هنا أي مجموعات إضافية بنفس المنهجية.
+  }
+}

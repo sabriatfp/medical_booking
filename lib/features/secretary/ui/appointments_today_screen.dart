@@ -1,32 +1,24 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// شاشة "مواعيد اليوم" للسكريتير
-/// appointments schema (تلخيص):
-/// - doctorId: String
-/// - date: String (yyyy-MM-dd)  ← مفتاح اليوم
-/// - time: String (HH:mm)       ← ترتيب Lexicographic صحيح
-/// - status: requested | confirmed | checked_in | canceled | no_show
-/// - patientName: String?
-/// - price: number?
-/// - آثار (سيتم تحديثها بحسب الإجراء):
-///   - confirmedAt: Timestamp(server)
-///   - confirmedBy: String(uid)
-///   - checkedInAt: Timestamp(server)
-///   - checkedInBy: String(uid)
-///   - noShowAt: Timestamp(server)
-///   - noShowBy: String(uid)
-///
-/// ملاحظات مهمة:
-/// 1) القراءة/الكتابة تتطلّب Auth (حتى لو Anonymous) + isSecretaryFor(doctorId) في القواعد.
-/// 2) قد يطلب Firestore فهرس مركّب عند where + orderBy (doctorId, date, time).
-/// 3) السكرتير مسموح له فقط: تأكيد الحجز، Check‑in، أو وسم كـ No‑show.
-/// 4) ممنوع تعديل الحقول الحساسة مثل doctorId/date/time/price عبر الواجهة.
+/// شاشة مواعيد اليوم.
+/// - في فضاء السكريتير: مرّر doctorId + hideInnerHeader:true + (اختياري asSecretary:true)
+/// - في وضع الطبيب: اترك asSecretary=false ومرّر doctorId إن كنت تستنتجه خارجيًا.
 class AppointmentsTodayScreen extends StatefulWidget {
   final String doctorId;
-  const AppointmentsTodayScreen({super.key, required this.doctorId});
+
+  /// هل المستخدم الحالي سكريتير (لإظهار أزرار Check-in / No-show)؟
+  final bool asSecretary;
+
+  /// NEW: إخفاء الهيدر الداخلي (العنوان + السهم) عندما نكون داخل فضاء السكريتير
+  final bool hideInnerHeader;
+
+  const AppointmentsTodayScreen({
+    super.key,
+    required this.doctorId,
+    this.asSecretary = true,
+    this.hideInnerHeader = false, // الافتراضي لا نخفي، نُخفي من فضاء السكريتير
+  });
 
   @override
   State<AppointmentsTodayScreen> createState() =>
@@ -34,339 +26,59 @@ class AppointmentsTodayScreen extends StatefulWidget {
 }
 
 class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
-  /// تتبع الوثائق الجاري تحديثها لتعطيل الأزرار وعرض لودر صغير
-  final _busy = <String>{};
-
-  /// افتراضيًا اليوم الحالي (بدون وقت)
-  DateTime _selectedDay = DateTime.now();
-
-  /// UID الحالي (قد يكون Anonymous)
-  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
+  late final DateTime _todayStart;
+  late final DateTime _todayEnd;
 
   @override
   void initState() {
     super.initState();
-    // نقصّ الوقت إلى بداية اليوم لضمان صيغة التاريخ
-    _selectedDay = DateTime(
-      _selectedDay.year,
-      _selectedDay.month,
-      _selectedDay.day,
-    );
-    // Debug اختياري:
-    // ignore: avoid_print
-    print('>>> Secretary UID = $_uid, doctorId = ${widget.doctorId}');
+    final now = DateTime.now();
+    _todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    _todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
   }
 
-  String get _dateKey => DateFormat('yyyy-MM-dd').format(_selectedDay);
-
-  /// استعلام: doctorId + date == اليوم، وترتيب حسب time (HH:mm)
-  Stream<QuerySnapshot<Map<String, dynamic>>> _stream() {
-    final q = FirebaseFirestore.instance
+  Stream<QuerySnapshot<Map<String, dynamic>>> _todayAppointmentsStream() {
+    // لو عندك dateTime مخزَّن Timestamp (موصى به)
+    return FirebaseFirestore.instance
         .collection('appointments')
         .where('doctorId', isEqualTo: widget.doctorId)
-        .where('date', isEqualTo: _dateKey)
-        .orderBy('time'); // قد يطلب فهرس مركّب (doctorId, date, time)
-    return q.snapshots();
+        .where('dateTime', isGreaterThanOrEqualTo: _todayStart)
+        .where('dateTime', isLessThanOrEqualTo: _todayEnd)
+        .orderBy('dateTime')
+        .snapshots();
   }
 
-  /// تحديث الحالة مع حقول أثر إضافية (ملتزمة بالقواعد)
-  Future<void> _updateStatus(
-    String id,
-    Map<String, Object?> patch, {
-    String? successMessage,
-  }) async {
-    try {
-      setState(() => _busy.add(id));
-      await FirebaseFirestore.instance
-          .collection('appointments')
-          .doc(id)
-          .update(patch);
-      if (!mounted) return;
-      if (successMessage != null && successMessage.isNotEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(successMessage)));
-      }
-    } on FirebaseException catch (e) {
-      debugPrint('AppointmentsToday UPDATE ERROR: ${e.code} ${e.message}');
-      if (!mounted) return;
-      String msg = 'تعذّر تحديث الحالة';
-      if (e.code == 'permission-denied') {
-        msg = 'تعذّر تحديث الحالة: صلاحيات غير كافية.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تعذّر تحديث الحالة')));
-    } finally {
-      if (mounted) setState(() => _busy.remove(id));
-    }
-  }
-
-  Future<void> _confirmBooking(String docId) async {
-    await _updateStatus(docId, {
-      // القواعد تسمح بهذه الحقول:
-      // 'status', 'confirmedAt', 'confirmedBy'
-      'status': 'confirmed',
-      'confirmedAt': FieldValue.serverTimestamp(),
-      'confirmedBy': _uid,
-    }, successMessage: 'تم تأكيد الحجز');
-  }
-
-  Future<void> _confirmCheckIn(String docId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تأكيد الحضور'),
-        content: const Text('هل تريد تأكيد حضور هذا الموعد (Check‑in)؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تأكيد'),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) {
-      await _updateStatus(docId, {
-        // القواعد ستسمح الآن بإرسال هذه الحقول
-        'status': 'checked_in',
-        'checkedInAt': FieldValue.serverTimestamp(),
-        'checkedInBy': _uid,
-      }, successMessage: 'تم تأكيد الحضور (Check‑in)');
-    }
-  }
-
-  Future<void> _confirmNoShow(String docId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('وسم كغياب'),
-        content: const Text('هل تريد وسم هذا الموعد كغياب (No‑show)؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تأكيد'),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) {
-      await _updateStatus(docId, {
-        // القواعد تسمح بـ noShowAt/noShowBy
-        'status': 'no_show',
-        'noShowAt': FieldValue.serverTimestamp(),
-        'noShowBy': _uid,
-      }, successMessage: 'تم وسم الموعد كغياب');
-    }
-  }
-
-  /// أزرار الحركة حسب الحالة:
-  /// requested → تأكيد الحجز / غياب
-  /// confirmed → Check‑in / غياب
-  /// checked_in / canceled / no_show → لا أزرار
-  List<Widget> _actionButtons(String docId, String status) {
-    final isLoading = _busy.contains(docId);
-    final List<Widget> btns = [];
-
-    Widget buildBtn({
-      required String text,
-      required IconData icon,
-      required Color color,
-      required VoidCallback onTap,
-      bool filled = true,
-    }) {
-      final iconChild = isLoading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Icon(icon, size: 18);
-
-      final style = filled
-          ? ElevatedButton.styleFrom(
-              backgroundColor: color,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              minimumSize: const Size(0, 40),
-            )
-          : ElevatedButton.styleFrom(
-              backgroundColor: color.withOpacity(.12),
-              foregroundColor: color,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              minimumSize: const Size(0, 40),
-            );
-
-      return Padding(
-        padding: const EdgeInsetsDirectional.only(start: 8),
-        child: ElevatedButton.icon(
-          icon: iconChild,
-          label: Text(text),
-          style: style,
-          onPressed: isLoading ? null : onTap,
-        ),
-      );
-    }
-
-    switch (status) {
-      case 'requested':
-      case 'pending': // دعم محتمل للحالة القديمة
-        btns.add(
-          buildBtn(
-            text: 'تأكيد الحجز',
-            icon: Icons.verified_outlined,
-            color: Colors.blue,
-            onTap: () => _confirmBooking(docId),
-          ),
-        );
-        btns.add(
-          buildBtn(
-            text: 'غياب',
-            icon: Icons.person_off_outlined,
-            color: Colors.red,
-            onTap: () => _confirmNoShow(docId),
-            filled: false,
-          ),
-        );
-        break;
-      case 'confirmed':
-        btns.add(
-          buildBtn(
-            text: 'Check‑in',
-            icon: Icons.how_to_reg_outlined,
-            color: Colors.green,
-            onTap: () => _confirmCheckIn(docId),
-          ),
-        );
-        btns.add(
-          buildBtn(
-            text: 'غياب',
-            icon: Icons.person_off_outlined,
-            color: Colors.red,
-            onTap: () => _confirmNoShow(docId),
-            filled: false,
-          ),
-        );
-        break;
-      default:
-        // checked_in | canceled | no_show → لا أزرار
-        break;
-    }
-
-    return btns;
-  }
-
-  /// تسمية عربية + ألوان حالة للـ Chip
-  (String label, Color fg, Color bg) _statusStyle(String s, BuildContext ctx) {
-    switch (s) {
-      case 'requested':
-      case 'pending':
-        return (
-          'بانتظار التأكيد',
-          Colors.grey.shade700,
-          Colors.grey.withOpacity(.12),
-        );
-      case 'confirmed':
-        return ('مؤكد', Colors.blue, Colors.blue.withOpacity(.12));
-      case 'checked_in':
-        return ('حضر', Colors.green, Colors.green.withOpacity(.12));
-      case 'canceled':
-        return ('ملغى', Colors.red, Colors.red.withOpacity(.12));
-      case 'no_show':
-        return ('غياب', Colors.amber.shade800, Colors.amber.withOpacity(.16));
-      default:
-        final c = Theme.of(ctx).colorScheme.onSurface;
-        return ('غير معروف', c, c.withOpacity(.08));
-    }
-  }
-
-  String _todayText() => DateFormat('yyyy-MM-dd').format(_selectedDay);
-
-  Future<void> _pickDay() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDay,
-      firstDate: DateTime(2023, 1, 1),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked != null) {
-      setState(
-        () => _selectedDay = DateTime(picked.year, picked.month, picked.day),
-      );
-    }
+  Future<void> _updateStatus(String apptId, String status) async {
+    await FirebaseFirestore.instance.collection('appointments').doc(apptId).update({
+      'status': status,
+      'statusUpdatedAt': FieldValue.serverTimestamp(),
+      'statusBy': {
+        'role': widget.asSecretary ? 'secretary' : 'doctor',
+        // uid يلتقط من Auth في سيرفيسك عادة؛ هنا نتركه اختياريًا لو تحب تضيفه من خارج
+      },
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // حماية بسيطة لو الشاشة فُتحت بدون Auth
-    if (_uid.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('مواعيد اليوم')),
-        body: const Center(
-          child: Text(
-            'لا تملك جلسة صالحة. الرجاء الدخول عبر كود السكرتير ثم إعادة المحاولة.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('مواعيد اليوم'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'اختر تاريخًا',
-            onPressed: _pickDay,
-            icon: const Icon(Icons.date_range),
-          ),
-        ],
-      ),
+      // ❗ لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير
+      appBar: widget.hideInnerHeader
+          ? null
+          : AppBar(title: const Text('مواعيد اليوم')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _stream(),
+        stream: _todayAppointmentsStream(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            // كشف أخطاء الصلاحيات بوضوح
-            final err = snap.error.toString();
-            debugPrint('AppointmentsToday STREAM ERROR: $err');
-            final permDenied =
-                err.contains('permission-denied') ||
-                err.contains('PERMISSION_DENIED');
-            return Center(
-              child: Text(
-                permDenied
-                    ? 'لا تملك صلاحية الاطلاع على المواعيد لهذا الطبيب.\nتأكد من تسجيل الدخول كـ سكريتير لهذا الطبيب.'
-                    : 'حدث خطأ أثناء جلب البيانات',
-                textAlign: TextAlign.center,
-              ),
-            );
+            return const Center(child: Text('خطأ في تحميل مواعيد اليوم'));
           }
 
           final docs = snap.data?.docs ?? [];
           if (docs.isEmpty) {
-            return Center(
-              child: Text(
-                'لا توجد مواعيد في $_dateKey',
-                textAlign: TextAlign.center,
-              ),
-            );
+            return const Center(child: Text('لا توجد مواعيد اليوم'));
           }
 
           return ListView.separated(
@@ -374,141 +86,188 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
             itemCount: docs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
-              final d = docs[i];
-              final data = d.data();
-              final docId = d.id;
-              final patientName = (data['patientName'] ?? '').toString();
-              final time = (data['time'] ?? '--:--').toString(); // HH:mm
-              final price = (data['price'] is num)
-                  ? (data['price'] as num).toDouble()
-                  : null;
-              final status = (data['status'] ?? 'requested').toString();
-              final (label, fg, bg) = _statusStyle(status, context);
+              final ref = docs[i].reference;
+              final d = docs[i].data();
 
-              final isLoading = _busy.contains(docId);
+              final patientName = (d['patientName'] ?? 'مريض').toString();
+              final patientPhone = (d['patientPhone'] ?? '').toString();
+              final status = (d['status'] ?? 'pending').toString();
+
+              DateTime? dt;
+              final dtAny = d['dateTime'];
+              if (dtAny is Timestamp) dt = dtAny.toDate();
+
+              final timeLabel = dt != null
+                  ? "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}"
+                  : (d['time'] ?? '--:--').toString();
+
+              final Color statusColor = switch (status) {
+                'confirmed' => Colors.green,
+                'checked_in' => Colors.blue,
+                'no_show' => Colors.deepOrange,
+                'canceled' => Colors.red,
+                _ => Colors.orange,
+              };
+
+              // السكريتير حصريًا: Check-in / No-show
+              final canCheckIn = widget.asSecretary && status == 'confirmed';
+              final canNoShow =
+                  widget.asSecretary &&
+                  (status == 'pending' ||
+                      status == 'requested' ||
+                      status == 'confirmed');
 
               return Card(
-                elevation: 1.5,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: statusColor.withOpacity(.15),
+                    child: Icon(Icons.person, color: statusColor),
+                  ),
+                  title: Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              time,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: bg,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: fg.withOpacity(.25)),
-                            ),
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                color: fg,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          if (price != null)
-                            Row(
-                              children: [
-                                const Icon(Icons.payments_outlined, size: 18),
-                                const SizedBox(width: 4),
-                                Text('${price.toStringAsFixed(0)} د.ت'),
-                              ],
-                            ),
-                        ],
+                      Expanded(
+                        child: Text(
+                          patientName,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.person_outline, size: 18),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              patientName.isEmpty ? 'مريض' : patientName,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(.12),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          _statusLabel(status),
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      // الأزرار (تمكين/تعطيل بحسب _busy)
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: isLoading
-                              ? const [
-                                  SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                ]
-                              : _actionButtons(docId, status),
                         ),
                       ),
                     ],
                   ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      "الوقت: $timeLabel • الهاتف: ${patientPhone.isEmpty ? 'غير متوفر' : patientPhone}",
+                    ),
+                  ),
+
+                  // أزرار الإجراءات (للسكريتير فقط)
+                  trailing: widget.asSecretary
+                      ? Wrap(
+                          spacing: 6,
+                          children: [
+                            if (canCheckIn)
+                              _miniBtn(
+                                label: 'حضور',
+                                color: Colors.blue,
+                                onTap: () async {
+                                  try {
+                                    await _updateStatus(ref.id, 'checked_in');
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('تم تسجيل الحضور'),
+                                      ),
+                                    );
+                                  } on FirebaseException catch (e) {
+                                    _showPermSnack(context, e);
+                                  } catch (e) {
+                                    _showError(context, e);
+                                  }
+                                },
+                              ),
+                            if (canNoShow)
+                              _miniBtn(
+                                label: 'لم يحضر',
+                                color: Colors.deepOrange,
+                                onTap: () async {
+                                  try {
+                                    await _updateStatus(ref.id, 'no_show');
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('تم وضع الحالة: لم يحضر'),
+                                      ),
+                                    );
+                                  } on FirebaseException catch (e) {
+                                    _showPermSnack(context, e);
+                                  } catch (e) {
+                                    _showError(context, e);
+                                  }
+                                },
+                              ),
+                          ],
+                        )
+                      : null,
                 ),
               );
             },
           );
         },
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(
-            top: BorderSide(color: Theme.of(context).dividerColor),
-          ),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.calendar_today_outlined, size: 18),
-            const SizedBox(width: 6),
-            Text('تاريخ: ${_todayText()}'),
-            const Spacer(),
-            const Text('الإجراءات: تأكيد / Check‑in / غياب'),
-          ],
+    );
+  }
+
+  String _statusLabel(String s) {
+    return switch (s) {
+      'confirmed' => 'مؤكّد',
+      'checked_in' => 'حاضر',
+      'no_show' => 'لم يحضر',
+      'canceled' => 'ملغى',
+      'pending' => 'قيد الانتظار',
+      'requested' => 'طلب حجز',
+      _ => s,
+    };
+  }
+
+  Widget _miniBtn({
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ElevatedButton(
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        minimumSize: const Size(10, 36),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  void _showPermSnack(BuildContext context, FirebaseException e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          e.code == 'permission-denied'
+              ? 'صلاحيات غير كافية. تأكّد من قواعد Firestore وجلسة السكريتير.'
+              : 'تعذّر تنفيذ العملية: ${e.code}',
         ),
       ),
     );
+  }
+
+  void _showError(BuildContext context, Object e) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('خطأ غير متوقع: $e')));
   }
 }
