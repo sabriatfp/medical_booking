@@ -26,19 +26,19 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     return FirebaseFirestore.instance
         .collection('users')
         .where('role', isEqualTo: 'doctor')
-        .orderBy(
-          'email',
-        ) // ترتيب ثابت؛ يمكنك تغييره إلى 'name' إذا كان موجودًا ومفهرسًا
+        .orderBy('email') // قد يطلب فهرس مركّب؛ أنشئه إن ظهر التنبيه
         .snapshots();
   }
 
-  /// حساب حالة الاشتراك
+  // ---------------------------
+  // Helpers: حالة الاشتراك/العرض
+  // ---------------------------
   bool _isActive(Map<String, dynamic> data) {
     final active = (data['subscriptionActive'] ?? false) == true;
     if (!active) return false;
 
     final ts = data['subscriptionEnd'];
-    if (ts == null) return active; // لو لم تحدد تاريخ نهاية، نعتبره نشطًا
+    if (ts == null) return active; // دون تاريخ نهاية نعتبره نشطًا
     if (ts is! Timestamp) return false;
 
     return ts.toDate().isAfter(DateTime.now());
@@ -60,7 +60,6 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     return days <= 7;
   }
 
-  /// تطبيق فلتر الواجهة (على الكلاينت بعد الجلب)
   bool _passesFilter(Map<String, dynamic> data) {
     switch (_filter) {
       case SubFilter.all:
@@ -74,7 +73,6 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     }
   }
 
-  /// مطابقة البحث (اسم/إيميل) — غيّر الحقول حسب ما لديك
   bool _matchesSearch(Map<String, dynamic> data) {
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isEmpty) return true;
@@ -83,38 +81,124 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     return name.contains(q) || email.contains(q);
   }
 
-  Future<void> _activateFor(
-    String userId, {
-    required Duration duration,
-    String? plan,
-  }) async {
-    final now = DateTime.now();
-    final end = now.add(duration);
+  String _fmtDate(DateTime dt) {
+    // صيغة بسيطة YYYY-MM-DD
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
 
-    // ------------- 👇 طباعة التثبت قبل التحديث -------------
-    print('SUBS UPDATE → path=users/$userId, payload=');
-    print({
-      'subscriptionActive': true,
-      'subscriptionEnd': 'TIMESTAMP(${end.toIso8601String()})',
-      'subscriptionPlan': plan ?? 'manual',
-      'subscriptionUpdatedAt': 'serverTimestamp',
-    });
-    // -------------------------------------------------------
-
-    await FirebaseFirestore.instance.collection('users').doc(userId).update({
-      'subscriptionActive': true,
-      'subscriptionEnd': Timestamp.fromDate(end),
-      'subscriptionPlan': plan ?? 'manual',
-      'subscriptionUpdatedAt': FieldValue.serverTimestamp(),
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم تفعيل الاشتراك حتى ${_fmtDate(end)}')),
+  Widget _buildFilterChips() {
+    return Wrap(
+      spacing: 8,
+      children: [
+        ChoiceChip(
+          label: const Text('الكل'),
+          selected: _filter == SubFilter.all,
+          onSelected: (_) => setState(() => _filter = SubFilter.all),
+        ),
+        ChoiceChip(
+          label: const Text('نشط'),
+          selected: _filter == SubFilter.active,
+          onSelected: (_) => setState(() => _filter = SubFilter.active),
+        ),
+        ChoiceChip(
+          label: const Text('غير نشط/منتهي'),
+          selected: _filter == SubFilter.inactive,
+          onSelected: (_) => setState(() => _filter = SubFilter.inactive),
+        ),
+        ChoiceChip(
+          label: const Text('ينتهي قريبًا (≤ 7 أيام)'),
+          selected: _filter == SubFilter.expiringSoon,
+          onSelected: (_) => setState(() => _filter = SubFilter.expiringSoon),
+        ),
+      ],
     );
   }
 
-  Future<void> _activateCustomDialog(String userId) async {
+  // -----------------------------------------
+  // 🔒 كتابة موحّدة: users/{doctorUid} + doctor_subscriptions/{doctorId}
+  // -----------------------------------------
+  Future<void> _updateDoctorSubscription({
+    required String doctorUid,
+    required String doctorId,
+    required bool active,
+    DateTime? end,
+    String? plan,
+  }) async {
+    final db = FirebaseFirestore.instance;
+    final usersRef = db.collection('users').doc(doctorUid);
+    final subsRef = db.collection('doctor_subscriptions').doc(doctorId);
+
+    // طباعة للتشخيص
+    // ignore: avoid_print
+    print(
+      'SUBS TX → doctorUid=$doctorUid, doctorId=$doctorId, active=$active, end=$end, plan=$plan',
+    );
+
+    await db.runTransaction((tx) async {
+      tx.set(usersRef, {
+        'subscriptionActive': active,
+        'subscriptionEnd': end == null ? null : Timestamp.fromDate(end.toUtc()),
+        if (plan != null) 'subscriptionPlan': plan,
+        'subscriptionUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      tx.set(subsRef, {
+        'active': active,
+        'end': end == null ? null : Timestamp.fromDate(end.toUtc()),
+        if (plan != null) 'plan': plan,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  // -----------------------------------------
+  // إجراءات الواجهة (تفعل/تعطل)
+  // -----------------------------------------
+  Future<void> _activateFor(
+    String userId,
+    Map<String, dynamic> userData, {
+    required Duration duration,
+    String? plan,
+  }) async {
+    final doctorId = (userData['doctorId'] ?? '').toString().trim();
+    if (doctorId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'لا يمكن التفعيل: doctorId غير موجود في وثيقة المستخدم',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    final end = now.add(duration);
+
+    await _updateDoctorSubscription(
+      doctorUid: userId,
+      doctorId: doctorId,
+      active: true,
+      end: end,
+      plan: plan ?? 'manual',
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم تفعيل الاشتراك حتى ${_fmtDate(end.toLocal())}'),
+      ),
+    );
+  }
+
+  Future<void> _activateCustomDialog(
+    String userId,
+    Map<String, dynamic> userData,
+  ) async {
     final controller = TextEditingController(text: '30');
     final formKey = GlobalKey<FormState>();
     final result = await showDialog<Duration>(
@@ -159,11 +243,24 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     );
 
     if (result != null) {
-      await _activateFor(userId, duration: result, plan: 'custom');
+      await _activateFor(userId, userData, duration: result, plan: 'custom');
     }
   }
 
-  Future<void> _deactivate(String userId) async {
+  Future<void> _deactivate(String userId, Map<String, dynamic> userData) async {
+    final doctorId = (userData['doctorId'] ?? '').toString().trim();
+    if (doctorId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'لا يمكن التعطيل: doctorId غير موجود في وثيقة المستخدم',
+          ),
+        ),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -183,12 +280,13 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     );
     if (confirm != true) return;
 
-    await FirebaseFirestore.instance.collection('users').doc(userId).update({
-      'subscriptionActive': false,
-      // حذف تاريخ النهاية (اختياري)
-      'subscriptionEnd': FieldValue.delete(),
-      'subscriptionUpdatedAt': FieldValue.serverTimestamp(),
-    });
+    await _updateDoctorSubscription(
+      doctorUid: userId,
+      doctorId: doctorId,
+      active: false,
+      end: null,
+      plan: null,
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -196,44 +294,9 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     ).showSnackBar(const SnackBar(content: Text('تم تعطيل الاشتراك')));
   }
 
-  String _fmtDate(DateTime dt) {
-    // صيغة بسيطة YYYY-MM-DD
-    final y = dt.year.toString().padLeft(4, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
-
-  Widget _buildFilterChips() {
-    return Wrap(
-      spacing: 8,
-      children: [
-        ChoiceChip(
-          label: const Text('الكل'),
-          selected: _filter == SubFilter.all,
-          onSelected: (_) => setState(() => _filter = SubFilter.all),
-        ),
-        ChoiceChip(
-          label: const Text('نشط'),
-          selected: _filter == SubFilter.active,
-          onSelected: (_) => setState(() => _filter = SubFilter.active),
-        ),
-        ChoiceChip(
-          label: const Text('غير نشط/منتهي'),
-          selected: _filter == SubFilter.inactive,
-          onSelected: (_) => setState(() => _filter = SubFilter.inactive),
-        ),
-        ChoiceChip(
-          label: const Text('ينتهي قريبًا (≤ 7 أيام)'),
-          selected: _filter == SubFilter.expiringSoon,
-          onSelected: (_) => setState(() => _filter = SubFilter.expiringSoon),
-        ),
-      ],
-    );
-  }
-
   PopupMenuButton<int> _actionsMenu(String userId, Map<String, dynamic> data) {
     final isActiveNow = _isActive(data);
+    final hasDoctorId = (data['doctorId'] ?? '').toString().trim().isNotEmpty;
 
     return PopupMenuButton<int>(
       onSelected: (value) async {
@@ -241,25 +304,28 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
           if (value == 7) {
             await _activateFor(
               userId,
+              data,
               duration: const Duration(days: 7),
               plan: '7d',
             );
           } else if (value == 30) {
             await _activateFor(
               userId,
+              data,
               duration: const Duration(days: 30),
               plan: '30d',
             );
           } else if (value == 90) {
             await _activateFor(
               userId,
+              data,
               duration: const Duration(days: 90),
               plan: '90d',
             );
           } else if (value == 0) {
-            await _activateCustomDialog(userId);
+            await _activateCustomDialog(userId, data);
           } else if (value == -1) {
-            await _deactivate(userId);
+            await _deactivate(userId, data);
           }
         } catch (e) {
           if (!mounted) return;
@@ -269,14 +335,30 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
         }
       },
       itemBuilder: (ctx) => [
-        const PopupMenuItem(value: 7, child: Text('تفعيل 7 أيام')),
-        const PopupMenuItem(value: 30, child: Text('تفعيل 30 يومًا')),
-        const PopupMenuItem(value: 90, child: Text('تفعيل 90 يومًا')),
-        const PopupMenuItem(value: 0, child: Text('تفعيل لمدة مخصصة…')),
+        PopupMenuItem(
+          value: 7,
+          enabled: hasDoctorId,
+          child: const Text('تفعيل 7 أيام'),
+        ),
+        PopupMenuItem(
+          value: 30,
+          enabled: hasDoctorId,
+          child: const Text('تفعيل 30 يومًا'),
+        ),
+        PopupMenuItem(
+          value: 90,
+          enabled: hasDoctorId,
+          child: const Text('تفعيل 90 يومًا'),
+        ),
+        PopupMenuItem(
+          value: 0,
+          enabled: hasDoctorId,
+          child: const Text('تفعيل لمدة مخصصة…'),
+        ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: -1,
-          enabled: isActiveNow,
+          enabled: hasDoctorId && isActiveNow,
           child: const Text('تعطيل الاشتراك'),
         ),
       ],
@@ -364,6 +446,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
 
                     final name = (data['name'] ?? 'بدون اسم').toString();
                     final email = (data['email'] ?? '').toString();
+                    final doctorId = (data['doctorId'] ?? '').toString().trim();
 
                     final active = _isActive(data);
                     final daysLeft = _daysLeft(data);
@@ -377,7 +460,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                     if (active) {
                       if (daysLeft != null) {
                         statusText =
-                            'نشط — ${endDate != null ? _fmtDate(endDate) : ''} (متبقي $daysLeftيوم)';
+                            'نشط — ${endDate != null ? _fmtDate(endDate) : ''} (متبقي $daysLeft يوم)';
                       } else {
                         statusText = 'نشط';
                       }
@@ -410,6 +493,11 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                         children: [
                           if (email.isNotEmpty)
                             Text(email, textDirection: TextDirection.ltr),
+                          if (doctorId.isNotEmpty)
+                            Text(
+                              'doctorId: $doctorId',
+                              style: const TextStyle(fontSize: 12),
+                            ),
                           const SizedBox(height: 2),
                           Text(
                             statusText,

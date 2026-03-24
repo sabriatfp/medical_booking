@@ -14,11 +14,9 @@ class DoctorDetailsScreen extends StatefulWidget {
 }
 
 class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
- 
   Map<String, dynamic>? scheduleData;
   bool loading = true;
   Set<String> daysOff = {};
- 
 
   @override
   void initState() {
@@ -27,39 +25,34 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   Future<void> loadSchedule() async {
-  final doctorId = widget.doctor.id; // ✅ هذا هو المهم
+    final doctorId = widget.doctor.id; // ✅ هذا هو المهم
 
-  // جلب بيانات جدول الطبيب
-  final doctorSnap = await FirebaseFirestore.instance
-      .collection('doctors')
-      .doc(doctorId)
-      .get();
+    // جلب بيانات جدول الطبيب
+    final doctorSnap = await FirebaseFirestore.instance
+        .collection('doctors')
+        .doc(doctorId)
+        .get();
 
-  if (doctorSnap.exists) {
-    scheduleData = doctorSnap.data();
+    if (doctorSnap.exists) {
+      scheduleData = doctorSnap.data();
+    }
+
+    // جلب أيام الغياب
+    final offSnap = await FirebaseFirestore.instance
+        .collection('doctor_days_off')
+        .where('doctorId', isEqualTo: doctorId)
+        .get();
+
+    daysOff = offSnap.docs.map((d) => (d['date'] as String).trim()).toSet();
+
+    setState(() => loading = false);
   }
-
-  // جلب أيام الغياب
-  final offSnap = await FirebaseFirestore.instance
-      .collection('doctor_days_off')
-      .where('doctorId', isEqualTo: doctorId)
-      .get();
-
-  daysOff = offSnap.docs.map((d) => (d['date'] as String).trim()).toSet();
-
-  setState(() => loading = false);
-}
-
 
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
-    
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.doctor.name)),
@@ -73,7 +66,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
-          if (scheduleData?['weeks'] != null && scheduleData!['weeks'].isNotEmpty)
+          if (scheduleData?['weeks'] != null &&
+              scheduleData!['weeks'].isNotEmpty)
             _buildDaysList(scheduleData!['weeks'])
           else
             const Text("لا توجد مواعيد متاحة."),
@@ -99,7 +93,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Text(d.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(
+          d.name,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 4),
         Row(
           children: [
@@ -192,7 +189,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         builder: (_) => SlotsScreen(
                           doctor: widget.doctor,
                           date: date,
-                          schedule: scheduleData!,
+                          scheduleData: scheduleData, // 🔥 مهم
                         ),
                       ),
                     );

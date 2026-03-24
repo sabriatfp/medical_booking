@@ -13,7 +13,6 @@ class MyAppointmentsScreen extends StatefulWidget {
 class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
   final _doctorService = DoctorService();
   String? patientId;
-  String? doctorId;
   bool loading = true;
 
   @override
@@ -30,8 +29,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     }
 
     patientId = user.uid;
-    doctorId = await _doctorService.getDoctorId();
-
     setState(() => loading = false);
   }
 
@@ -41,53 +38,42 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     return FirebaseFirestore.instance
         .collection('appointments')
         .where('patientId', isEqualTo: patientId)
-        .orderBy('dateTime') // إن ظهرت رسالة index أنشئ Composite Index
+        .orderBy('dateTime', descending: false)
         .snapshots()
         .map((snap) {
-      final results = <Map<String, dynamic>>[];
+          final results = <Map<String, dynamic>>[];
 
-      for (final doc in snap.docs) {
-        final data = doc.data();
+          for (final doc in snap.docs) {
+            final data = doc.data();
 
-        // تحويل Timestamp إلى DateTime (إن لزم)
-        DateTime? dt;
-        final raw = data['dateTime'];
-        if (raw is Timestamp) {
-          dt = raw.toDate();
-        } else if (raw is DateTime) {
-          dt = raw;
-        } else if (raw is String) {
-          dt = DateTime.tryParse(raw);
-        }
+            // ✅ نعتمد فقط على dateTime
+            DateTime? dt;
+            if (data['dateTime'] != null && data['dateTime'] is Timestamp) {
+              dt = (data['dateTime'] as Timestamp).toDate();
+            }
 
-        results.add({
-          'id': doc.id,
-          'doctorId': (data['doctorId'] ?? '').toString(),
-          'doctorName': (data['doctorName'] ?? '').toString(),
-          'doctorSpecialty': (data['doctorSpecialty'] ?? '').toString(),
-          'dateTime': dt,
-          'status': (data['status'] ?? 'pending').toString(),
+            results.add({
+              'id': doc.id,
+              'doctorId': (data['doctorId'] ?? '').toString(),
+              'doctorName': (data['doctorName'] ?? '').toString(),
+              'doctorSpecialty': (data['doctorSpecialty'] ?? '').toString(),
+              'dateTime': dt,
+              'status': (data['status'] ?? 'pending').toString(),
+            });
+          }
+
+          return results;
         });
-      }
-
-      return results;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (patientId == null) {
-      return const Scaffold(
-        body: Center(
-          child: Text('لم يتم تسجيل الدخول'),
-        ),
-      );
+      return const Scaffold(body: Center(child: Text('لم يتم تسجيل الدخول')));
     }
 
     return Scaffold(
@@ -106,6 +92,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           }
 
           final items = snapshot.data ?? [];
+
           if (items.isEmpty) {
             return const Center(child: Text('لا توجد مواعيد بعد.'));
           }
@@ -117,25 +104,29 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
             itemBuilder: (context, i) {
               final a = items[i];
 
-              // العنوان: اسم الطبيب إن وُجد، وإلا doctorId
               final String doctorName = a['doctorName'] ?? '';
               final String doctorSpec = a['doctorSpecialty'] ?? '';
               final String fallbackTitle = 'طبيب: ${a['doctorId']}';
-              final String title = (doctorName.isNotEmpty ? doctorName : fallbackTitle);
+              final String title = (doctorName.isNotEmpty
+                  ? doctorName
+                  : fallbackTitle);
 
-              // التاريخ والوقت
+              // ✅ استخراج التاريخ والوقت من dateTime فقط
               final DateTime? dt = a['dateTime'] as DateTime?;
+
               final String dateStr = dt == null
                   ? '—'
                   : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
               final String timeStr = dt == null
                   ? '—'
                   : '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
-              // الحالة + لون الشارة
               final String status = a['status'] ?? 'pending';
+
               Color statusColor;
               String statusLabelAr;
+
               switch (status) {
                 case 'confirmed':
                   statusColor = Colors.green;
@@ -189,11 +180,16 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: statusColor.withOpacity(0.12),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: statusColor.withOpacity(0.5)),
+                                  border: Border.all(
+                                    color: statusColor.withOpacity(0.5),
+                                  ),
                                 ),
                                 child: Text(
                                   statusLabelAr,
@@ -207,34 +203,43 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                               PopupMenuButton<String>(
                                 onSelected: (v) async {
                                   if (v == 'cancel' && a['id'] != null) {
-                                    final appointmentRef = FirebaseFirestore.instance
+                                    final appointmentRef = FirebaseFirestore
+                                        .instance
                                         .collection('appointments')
                                         .doc(a['id']);
 
-                                    await FirebaseFirestore.instance.runTransaction((t) async {
-                                      final apptSnap = await t.get(appointmentRef);
-                                      if (!apptSnap.exists) return;
+                                    await FirebaseFirestore.instance
+                                        .runTransaction((t) async {
+                                          final apptSnap = await t.get(
+                                            appointmentRef,
+                                          );
+                                          if (!apptSnap.exists) return;
 
-                                      final data = apptSnap.data()!;
-                                      final slotId = data['slotId'];
+                                          final data = apptSnap.data()!;
+                                          final slotId = data['slotId'];
 
-                                      // إلغاء الموعد
-                                      t.update(appointmentRef, {'status': 'canceled'});
+                                          t.update(appointmentRef, {
+                                            'status': 'canceled',
+                                          });
 
-                                      // تحرير التوقيت عند الطبيب
-                                      if (slotId != null) {
-                                        final slotRef = FirebaseFirestore.instance
-                                            .collection('doctor_slots')
-                                            .doc(slotId);
+                                          if (slotId != null) {
+                                            final slotRef = FirebaseFirestore
+                                                .instance
+                                                .collection('doctor_slots')
+                                                .doc(slotId);
 
-                                        t.update(slotRef, {'taken': false});
-                                      }
-                                    });
+                                            t.update(slotRef, {'taken': false});
+                                          }
+                                        });
 
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
-                                          content: Text('تم إلغاء الموعد وأصبح التوقيت متاحًا'),
+                                          content: Text(
+                                            'تم إلغاء الموعد وأصبح التوقيت متاحًا',
+                                          ),
                                         ),
                                       );
                                     }

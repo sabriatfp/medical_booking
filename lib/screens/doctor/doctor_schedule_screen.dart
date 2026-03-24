@@ -1,25 +1,21 @@
+// lib/screens/doctor/doctor_schedule_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-
-// خدمة الطبيب لاستخراج doctorId تلقائيًا عند وضع "الطبيب"
 import '../../services/doctor_service.dart';
 
 class DoctorScheduleScreen extends StatefulWidget {
-  /// في وضع الطبيب: اتركها null وسيتم استنتاج doctorId من الحساب
-  /// في وضع السكرتير: مرّر doctorId + asSecretary: true
   final String? doctorId;
   final bool asSecretary;
-
-  /// NEW: إخفاء الهيدر الداخلي (العنوان + السهم) عندما نكون في فضاء السكريتير
   final bool hideInnerHeader;
 
   const DoctorScheduleScreen({
     super.key,
     this.doctorId,
     this.asSecretary = false,
-    this.hideInnerHeader = false, // الافتراضي: لا نخفي
+    this.hideInnerHeader = false,
   });
 
   @override
@@ -27,17 +23,12 @@ class DoctorScheduleScreen extends StatefulWidget {
 }
 
 class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
-  // ---- هوية الطبيب النهائية ----
   String? _resolvedDoctorId;
 
-  // ---- حالة تحميل/خطأ ----
   bool _loading = true;
   String? _error;
 
-  /// المدة المعتمدة فعليًا (المحفوظة في Firestore) — تظهر عليها ✔
   int? slotDuration;
-
-  /// الاختيار المؤقّت في الواجهة قبل التفعيل — يتلوّن Tonal خفيف
   int? selectedSlot;
 
   final List<String> weekDays = const [
@@ -50,7 +41,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     "الأحد",
   ];
 
-  /// النموذج الأسبوعي الأساسي (يمكن للطبيب/السكرتير تعديله)
   Map<String, Map<String, dynamic>> weeklyTemplate = {
     "الإثنين": {"available": true, "start": "08:00", "end": "16:00"},
     "الثلاثاء": {"available": true, "start": "08:00", "end": "16:00"},
@@ -61,7 +51,10 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     "الأحد": {"available": false, "start": "08:00", "end": "16:00"},
   };
 
-  /// الأسابيع الثلاثة القادمة (21 يوم)
+  /// NEW: جميع الأيام الاستثنائية (من doctor_days_off)
+  Set<String> exceptionalDaysOff = {};
+
+  /// NEW: weeks سيحتوي الآن أيضًا على slots
   List<Map<String, dynamic>> weeks = [];
 
   @override
@@ -70,12 +63,32 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     _resolveDoctorId();
   }
 
+  /// NEW — دالة توليد الفترات بالساعات
+  List<String> generateSlots(String start, String end, int duration) {
+    final s = start.split(":");
+    final e = end.split(":");
+
+    int startMin = int.parse(s[0]) * 60 + int.parse(s[1]);
+    int endMin = int.parse(e[0]) * 60 + int.parse(e[1]);
+
+    List<String> out = [];
+
+    while (startMin + duration <= endMin) {
+      final h = (startMin ~/ 60).toString().padLeft(2, '0');
+      final m = (startMin % 60).toString().padLeft(2, '0');
+      out.add("$h:$m");
+      startMin += duration;
+    }
+
+    return out;
+  }
+
+  /// تحميل doctorId + العطل الاستثنائية قبل توليد weeks
   Future<void> _resolveDoctorId() async {
     try {
       if (widget.doctorId != null && widget.doctorId!.isNotEmpty) {
-        _resolvedDoctorId = widget.doctorId; // وضع السكرتير
+        _resolvedDoctorId = widget.doctorId;
       } else {
-        // وضع الطبيب: نستخرج doctorId من الخدمة
         _resolvedDoctorId = await DoctorService().getDoctorId();
       }
 
@@ -83,49 +96,63 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
         _error = 'لم يتم العثور على معرف الطبيب';
       } else {
         await _loadDoctorSchedule();
+        await _loadExceptionalDaysOff();
         _generateThreeWeeks();
         await _updateFullDays();
       }
-    } catch (_) {
-      _error = 'خطأ أثناء تحديد الطبيب';
+    } catch (e) {
+      _error = "خطأ أثناء تحديد الطبيب";
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  /// تحميل إعدادات الطبيب (slotDuration + weeklyTemplate + weeks إن وجدت)
+  /// NEW — تحميل كل أيام العطل الاستثنائية doctor_days_off
+  Future<void> _loadExceptionalDaysOff() async {
+    if (_resolvedDoctorId == null) return;
+
+    final snap = await FirebaseFirestore.instance
+        .collection("doctor_days_off")
+        .where("doctorId", isEqualTo: _resolvedDoctorId)
+        .get();
+
+    exceptionalDaysOff = snap.docs
+        .map((d) => (d["date"] as String).trim())
+        .toSet();
+  }
+
+  /// تحميل slotDuration + weeklyTemplate + weeks
   Future<void> _loadDoctorSchedule() async {
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
 
     final snap = await FirebaseFirestore.instance
-        .collection('doctors')
+        .collection("doctors")
         .doc(doctorId)
         .get();
-    if (!snap.exists) return;
 
+    if (!snap.exists) return;
     final data = snap.data()!;
-    if (data['slotDuration'] != null) {
-      // slotDuration مخزّنة كرقم (int)
-      final any = data['slotDuration'];
-      if (any is int) slotDuration = any;
-      if (any is double) slotDuration = any.toInt();
-      selectedSlot = slotDuration; // ✅ تظهر الشيب المفعّلة عند الدخول
+
+    if (data["slotDuration"] != null) {
+      final sd = data["slotDuration"];
+      slotDuration = sd is int ? sd : (sd as double).toInt();
+      selectedSlot = slotDuration;
     }
 
-    if (data['weeklyTemplate'] != null) {
-      final t = Map<String, dynamic>.from(data['weeklyTemplate']);
+    if (data["weeklyTemplate"] != null) {
+      final t = Map<String, dynamic>.from(data["weeklyTemplate"]);
       t.forEach((key, value) {
         if (weeklyTemplate[key] != null && value is Map) {
-          weeklyTemplate[key]!['available'] = value['available'];
-          weeklyTemplate[key]!['start'] = value['start'];
-          weeklyTemplate[key]!['end'] = value['end'];
+          weeklyTemplate[key]!["available"] = value["available"];
+          weeklyTemplate[key]!["start"] = value["start"];
+          weeklyTemplate[key]!["end"] = value["end"];
         }
       });
     }
 
-    if (data['weeks'] != null) {
-      weeks = List<Map<String, dynamic>>.from(data['weeks']);
+    if (data["weeks"] != null) {
+      weeks = List<Map<String, dynamic>>.from(data["weeks"]);
     }
   }
 
@@ -135,29 +162,79 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     return from.add(Duration(days: diff));
   }
 
+  Future<int> _getAppointmentsCount(DateTime day) async {
+    final doctorId = _resolvedDoctorId;
+    if (doctorId == null) return 0;
+
+    final start = DateTime(day.year, day.month, day.day, 0, 0, 0);
+    final end = DateTime(day.year, day.month, day.day, 23, 59, 59);
+
+    final query = await FirebaseFirestore.instance
+        .collection('appointments')
+        .where('doctorId', isEqualTo: doctorId)
+        .where('dateTime', isGreaterThanOrEqualTo: start)
+        .where('dateTime', isLessThanOrEqualTo: end)
+        .get();
+
+    int count = 0;
+
+    for (var doc in query.docs) {
+      final d = doc.data();
+      final s = (d['status'] ?? '').toString();
+
+      // نحتسب فقط المواعيد الفعلية (pending أو confirmed)
+      if (s == 'pending' || s == 'confirmed') {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  // --------------------------
+  // NEW — توليد أيام الأسبوع مع إضافة slots واحترام العطل الاستثنائية
+  // --------------------------
   List<Map<String, dynamic>> _generateWeekDays(DateTime startDate) {
     final List<Map<String, dynamic>> output = [];
+
     for (int i = 0; i < 7; i++) {
       final d = startDate.add(Duration(days: i));
       final dateStr = DateFormat("yyyy-MM-dd").format(d);
       final dayName = weekDays[d.weekday - 1];
       final tmpl = weeklyTemplate[dayName]!;
+
+      bool isDayOff = exceptionalDaysOff.contains(dateStr);
+
+      bool available = tmpl["available"] == true && !isDayOff;
+
+      // NEW — توليد slots بناءً على start/end/duration
+      List<String> slots = [];
+      if (available && slotDuration != null) {
+        slots = generateSlots(tmpl["start"], tmpl["end"], slotDuration!);
+      }
+
       output.add({
         "date": dateStr,
-        "available": tmpl["available"],
+        "available": available,
         "start": tmpl["start"],
         "end": tmpl["end"],
+        "slots": slots, // NEW 🔥
         "full": false,
       });
     }
+
     return output;
   }
 
+  // --------------------------
+  // توليد 3 أسابيع (21 يوم)
+  // --------------------------
   void _generateThreeWeeks() {
     final today = DateTime.now();
     final w1Start = _nextMonday(today);
 
     weeks = [];
+
     weeks.add({
       "startDate": w1Start.toIso8601String(),
       "days": _generateWeekDays(w1Start),
@@ -178,57 +255,37 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<int> _getAppointmentsCount(DateTime day) async {
-    final doctorId = _resolvedDoctorId;
-    if (doctorId == null) return 0;
-
-    final start = DateTime(day.year, day.month, day.day);
-    final end = DateTime(day.year, day.month, day.day, 23, 59, 59);
-
-    final query = await FirebaseFirestore.instance
-        .collection('appointments')
-        .where('doctorId', isEqualTo: doctorId)
-        .where('dateTime', isGreaterThanOrEqualTo: start)
-        .where('dateTime', isLessThanOrEqualTo: end)
-        .get();
-
-    int c = 0;
-    for (var doc in query.docs) {
-      final d = doc.data();
-      final s = (d['status'] ?? '').toString();
-      if (s == 'pending' || s == 'confirmed') c++;
-    }
-    return c;
-  }
-
-  int _calcMaxSlots(String start, String end, int slotMinutes) {
-    final s = start.split(":");
-    final e = end.split(":");
-    final sm = int.parse(s[0]) * 60 + int.parse(s[1]);
-    final em = int.parse(e[0]) * 60 + int.parse(e[1]);
-    final total = em - sm;
-    if (total <= 0) return 0;
-    return (total / slotMinutes).floor();
-  }
-
-  /// تحديث حالة الأيام الممتلئة اعتمادًا على slotDuration وعدد المواعيد
+  // --------------------------
+  // تحديث حالة الأيام الممتلئة (full)
+  // --------------------------
   Future<void> _updateFullDays() async {
     if (slotDuration == null) return;
+
     for (var w in weeks) {
       for (var day in w["days"]) {
         if (day["available"] != true) {
           day["full"] = false;
           continue;
         }
+
         final date = DateTime.parse(day["date"]);
-        final max = _calcMaxSlots(day["start"], day["end"], slotDuration!);
+
+        // عدد الساعات المولدة
+        final maxSlots = (day["slots"] as List?)?.length ?? 0;
+
+        // عدد المواعيد المحجوزة فعلياً
         final count = await _getAppointmentsCount(date);
-        day["full"] = count >= max;
+
+        day["full"] = count >= maxSlots;
       }
     }
+
     if (mounted) setState(() {});
   }
 
+  // ------------------------------------------------
+  // UI يبدأ هنا (لا تغيير في الـ UI نهائياً)
+  // ------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -239,7 +296,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
     if (_error != null) {
       return Scaffold(
-        // ❗️عند السكريتير نخفي الهيدر الداخلي حتى في حالة الخطأ
         appBar: widget.hideInnerHeader
             ? null
             : AppBar(title: const Text("إعدادات التوقيت")),
@@ -250,16 +306,15 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     final doctorId = _resolvedDoctorId!;
 
     return Scaffold(
-      // ❗️لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير
       appBar: widget.hideInnerHeader
           ? null
           : AppBar(title: const Text("إعدادات التوقيت")),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ---------------------------
-          // مدة الفحص الطبي (Slot Duration)
-          // ---------------------------
+          // --------------------------------------------
+          // مدة الفحص الطبي (UI كما هو بدون أي تغيير)
+          // --------------------------------------------
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -271,8 +326,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-
-                  // تنبيه لطيف في حال لا توجد قيمة مفعّلة
+                  // اختيار مدة الفحص UI كما هو
                   if (slotDuration == null)
                     Container(
                       width: double.infinity,
@@ -294,14 +348,12 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                       ),
                     ),
 
-                  // الشيبس (اختيار مؤقّت Tonal + مفعّل ✔)
                   Wrap(
                     spacing: 10,
                     runSpacing: 8,
                     children: [10, 15, 20, 25, 30].map((v) {
-                      final bool isActive = slotDuration == v; // ✔
-                      final bool isTentative =
-                          selectedSlot == v && !isActive; // Tonal
+                      final bool isActive = slotDuration == v;
+                      final bool isTentative = selectedSlot == v && !isActive;
 
                       final Color bgColor = isActive
                           ? scheme.primary.withOpacity(.16)
@@ -329,27 +381,24 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                           showCheckmark: false,
                           onSelected: (picked) {
                             if (!picked) return;
-                            if (!mounted) return;
-                            setState(() => selectedSlot = v); // اختيار مؤقّت
+                            setState(() => selectedSlot = v);
                           },
                           label: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (isActive) ...[
+                              if (isActive)
                                 Icon(
                                   Icons.check_circle,
                                   size: 18,
                                   color: scheme.primary,
                                 ),
-                                const SizedBox(width: 6),
-                              ] else if (isTentative) ...[
+                              if (isTentative)
                                 Icon(
                                   Icons.schedule,
                                   size: 18,
                                   color: scheme.onSecondaryContainer,
                                 ),
-                                const SizedBox(width: 6),
-                              ],
+                              const SizedBox(width: 6),
                               Text(
                                 "$v دقيقة",
                                 style: TextStyle(
@@ -376,7 +425,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
                   const SizedBox(height: 12),
 
-                  // زر تفعيل — يحفظ المؤقّت ويجعله هو المعتمد ✔
                   Align(
                     alignment: Alignment.centerRight,
                     child: ElevatedButton.icon(
@@ -394,11 +442,12 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                       'slotDuration': v,
                                     }, SetOptions(merge: true));
 
-                                if (!mounted) return;
                                 setState(() {
-                                  slotDuration = v; // انتقال ✔ للقيمة الجديدة
+                                  slotDuration = v;
                                 });
 
+                                // إعادة حساب الأيام
+                                _generateThreeWeeks();
                                 await _updateFullDays();
 
                                 if (!mounted) return;
@@ -425,9 +474,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
           const SizedBox(height: 20),
 
-          // ---------------------------
-          // النموذج الأسبوعي الأساسي
-          // ---------------------------
+          // --------------------------------------------
+          // النموذج الأسبوعي الأساسي (UI كما هو)
+          // --------------------------------------------
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -439,10 +488,12 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
+
                   Column(
                     children: weekDays.map((day) {
                       final d = weeklyTemplate[day]!;
                       final available = d["available"] == true;
+
                       return Column(
                         children: [
                           Row(
@@ -456,7 +507,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                               Switch(
                                 value: available,
                                 onChanged: (v) {
-                                  if (!mounted) return;
                                   setState(
                                     () => weeklyTemplate[day]!["available"] = v,
                                   );
@@ -464,6 +514,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                               ),
                             ],
                           ),
+
                           if (available)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -476,7 +527,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                           context,
                                           d["start"],
                                         );
-                                        if (t != null && mounted) {
+                                        if (t != null) {
                                           setState(() => d["start"] = t);
                                         }
                                       },
@@ -495,7 +546,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                           context,
                                           d["end"],
                                         );
-                                        if (t != null && mounted) {
+                                        if (t != null) {
                                           setState(() => d["end"] = t);
                                         }
                                       },
@@ -509,6 +560,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                 ],
                               ),
                             ),
+
                           const Divider(),
                         ],
                       );
@@ -521,13 +573,14 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
           const SizedBox(height: 20),
 
-          // ---------------------------
+          // ---------------------------------------------------
           // تخصيص الأسابيع القادمة (21 يومًا)
-          // ---------------------------
+          // ---------------------------------------------------
           const Text(
             "تخصيص الأسابيع القادمة (21 يومًا)",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
+
           const SizedBox(height: 12),
 
           Column(
@@ -536,9 +589,12 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
               final startDate = DateTime.parse(
                 w["startDate"].toString().trim(),
               );
+
               final days = w["days"] as List;
+
               final title =
                   "الأسبوع ${i + 1} (${startDate.day}/${startDate.month})";
+
               return Card(
                 child: ExpansionTile(
                   title: Text(title),
@@ -550,7 +606,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                       trailing: Switch(
                         value: d["available"] == true,
                         onChanged: (v) {
-                          if (!mounted) return;
                           setState(() => d["available"] = v);
                         },
                       ),
@@ -562,10 +617,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
           ),
 
           const SizedBox(height: 30),
-
-          // ---------------------------
-          // حفظ الإعدادات
-          // ---------------------------
+          // --------------------------------------------
+          // حفظ الإعدادات (مع حفظ slots داخل weeks)
+          // --------------------------------------------
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -585,6 +639,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     );
   }
 
+  // -------------------------------
+  // UI helpers
+  // -------------------------------
   Widget _timeBox({
     required IconData icon,
     required String label,
@@ -617,26 +674,36 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     );
   }
 
+  // ---------------------------------------------
+  // حفظ weeks + weeklyTemplate + slotDuration
+  // ---------------------------------------------
   Future<void> _saveDoctorSchedule() async {
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
 
+    // ✅ إعادة توليد weeks لضمان slots الجديدة
+    _generateThreeWeeks();
+    await _updateFullDays();
+
     await FirebaseFirestore.instance.collection('doctors').doc(doctorId).set({
-      "slotDuration": slotDuration, // ✅ نحفظ المفعّلة (ليست المؤقّتة)
+      "slotDuration": slotDuration,
       "weeklyTemplate": weeklyTemplate,
-      "weeks": weeks,
+      "weeks": weeks, // ✅ يحتوي الآن على slots + availability + full
       "ownerUid": FirebaseAuth.instance.currentUser!.uid,
     }, SetOptions(merge: true));
   }
 }
 
-/// اختيار وقت بسيط يعيد "HH:mm"
+/// اختيار وقت بصيغة HH:mm
 Future<String?> pickTime(BuildContext context, String initial) async {
-  final p = initial.split(":");
-  final t = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+  final parts = initial.split(":");
+  final t = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   final res = await showTimePicker(context: context, initialTime: t);
+
   if (res == null) return null;
+
   final h = res.hour.toString().padLeft(2, '0');
   final m = res.minute.toString().padLeft(2, '0');
+
   return "$h:$m";
 }

@@ -2,6 +2,7 @@ class Doctor {
   final String id;
   final String name;
   final String specialty;
+  final String? description;
   final double rating;
   final String address;
   final String phone;
@@ -9,11 +10,12 @@ class Doctor {
   final bool isPriceVisible;
   final bool isAvailable;
   final String? photoUrl;
-
+  final List<String> slots;
   Doctor({
     required this.id,
     required this.name,
     required this.specialty,
+    this.description,
     required this.rating,
     required this.address,
     required this.phone,
@@ -21,6 +23,7 @@ class Doctor {
     required this.isPriceVisible,
     required this.isAvailable,
     this.photoUrl,
+    required this.slots,
   });
 
   factory Doctor.fromMap(String id, Map<String, dynamic> data) {
@@ -57,13 +60,14 @@ class Doctor {
     return Doctor(
       id: id,
       name: asString(data['name']),
-      specialty: asString(data['specialty']),
+      specialty: asString(['specialty']),
       rating: rating,
       address: asString(data['address']),
       phone: asString(data['phone']),
       price: (data['price'] ?? 0).toDouble(),
       isPriceVisible: data['isPriceVisible'] ?? false,
       isAvailable: data['isAvailable'] ?? true,
+      slots: List<String>.from(data['slots'] ?? []),
 
       photoUrl: (data['photoUrl'] == null || data['photoUrl'] == '')
           ? null
