@@ -1,21 +1,19 @@
-import 'dart:async'; // غير ضرورية هنا
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-// 🔁 CHANGED: لن نوجّه مباشرة لـ HomeScreen بعد الآن
-// import 'home_screen.dart'; // 🧹 CLEANUP: لم نعد نستخدمه هنا
+import 'package:provider/provider.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import '../features/auth/ui/splash_wrapper.dart';
-
 import 'role_selection_screen.dart';
-// شاشة إدخال كود السكريتير (جديدة)
 import 'package:medical_booking/features/secretary/ui/secretary_code_screen.dart';
 import 'package:medical_booking/features/admin/ui/admin_login_screen.dart';
+import '../providers/language_provider.dart';
 
-/// ------------------------------
-/// SecretMultiTap ...
-/// ------------------------------
+/// --------------------------------------------------
+/// SecretMultiTap (كما هو دون تغيير)
+/// --------------------------------------------------
 class SecretMultiTap extends StatefulWidget {
   final Widget child;
   final int requiredTaps;
@@ -65,23 +63,15 @@ class _SecretMultiTapState extends State<SecretMultiTap> {
     if (_tapCount == 0) {
       _resetTimer?.cancel();
       _resetTimer = Timer(Duration(seconds: widget.windowInSeconds), () {
-        if (mounted) {
-          setState(() {
-            _tapCount = 0;
-          });
-        }
+        if (mounted) setState(() => _tapCount = 0);
       });
     }
 
-    setState(() {
-      _tapCount++;
-    });
+    _tapCount++;
 
     if (_tapCount >= widget.requiredTaps) {
       _resetTimer?.cancel();
-      _resetTimer = null;
       _tapCount = 0;
-
       widget.onUnlocked();
     }
   }
@@ -109,6 +99,9 @@ class _SecretMultiTapState extends State<SecretMultiTap> {
   }
 }
 
+/// --------------------------------------------------
+/// LoginScreen (الإصدار المترجم بالكامل)
+/// --------------------------------------------------
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -131,6 +124,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> login() async {
+    final t = AppLocalizations.of(context)!;
+
     setState(() {
       loading = true;
       error = null;
@@ -143,121 +138,135 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final uid = cred.user!.uid;
-      // 🧹 CLEANUP: ليس ضرورياً هنا؛ SplashWrapper سيقرأ users/{uid} ويقرر الوجهة
-      // إذا أردت فقط التحقق من وجود الوثيقة دون استخدامها يمكنك الإبقاء على السطور التالية:
+
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
 
-      if (!userDoc.exists) {
-        throw Exception("بيانات المستخدم غير موجودة");
-      }
+      if (!userDoc.exists) throw Exception(t.userDataNotFound);
 
       if (!mounted) return;
 
-      // 🔁 CHANGED: وجّه دائمًا إلى SplashWrapper (هو الذي يرسل Doctor/Patient إلى HomeScreen المشتركة)
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const SplashWrapper()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      setState(() => error = e.message ?? "حدث خطأ في تسجيل الدخول");
-    } catch (e) {
-      setState(() => error = "حدث خطأ غير متوقع");
+      setState(() => error = e.message ?? t.loginError);
+    } catch (_) {
+      setState(() => error = t.unexpectedError);
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
   void _openAdminLogin() {
-    Navigator.of(
+    Navigator.push(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const AdminLoginScreen()));
+      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final t = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("تسجيل الدخول")),
+      appBar: null, // تمت إزالة عنوان "تسجيل الدخول"
+
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
+
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // --- اللوجو: منطقة النقر السرّية ---
+                // ✅ الشعار
                 Center(
                   child: SecretMultiTap(
                     requiredTaps: 5,
                     windowInSeconds: 3,
-                    hapticOnEachTap: true,
                     onUnlocked: _openAdminLogin,
                     child: const Icon(
                       Icons.local_hospital,
-                      size: 80,
+                      size: 90,
                       color: Colors.teal,
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
 
-                // البريد وكلمة المرور
-                TextField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textDirection: TextDirection.ltr,
-                  decoration: const InputDecoration(
-                    labelText: "البريد الإلكتروني",
-                    border: OutlineInputBorder(),
+                // ✅ اسم التطبيق
+                Center(
+                  child: Text(
+                    "MEDICAL BOOKING",
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.teal,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
+
+                const SizedBox(height: 30),
+
+                // ✅ البريد
+                TextField(
+                  controller: emailController,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(
+                    labelText: t.email,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+
                 const SizedBox(height: 16),
+
+                // ✅ كلمة المرور
                 TextField(
                   controller: passController,
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: "كلمة المرور",
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: t.password,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
+
                 const SizedBox(height: 20),
 
                 if (error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      error!,
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.right,
-                    ),
+                  Text(
+                    error!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.right,
                   ),
 
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: loading ? null : login,
-                    child: loading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text("دخول"),
-                  ),
+                const SizedBox(height: 8),
+
+                // ✅ زر الدخول
+                ElevatedButton(
+                  onPressed: loading ? null : login,
+                  child: loading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(t.login),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
+                // ✅ إنشاء حساب جديد
                 TextButton(
                   onPressed: () {
                     Navigator.push(
@@ -267,34 +276,79 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     );
                   },
-                  child: const Text('إنشاء حساب جديد'),
+                  child: Text(t.createNewAccount),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 30),
                 const Divider(),
-                const SizedBox(height: 8),
+                const SizedBox(height: 14),
 
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.badge_outlined),
-                    label: const Text("فضاء السكريتير"),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SecretaryCodeScreen(),
-                        ),
-                      );
-                    },
-                  ),
+                // ✅ زر تغيير اللغة + زر السكريتير
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // ✅ زر تغيير اللغة
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.language),
+                      label: Text(t.language),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: Text(t.chooseLanguage),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    Provider.of<LanguageProvider>(
+                                      context,
+                                      listen: false,
+                                    ).changeLanguage('ar');
+                                    Navigator.pop(context);
+                                  },
+                                  child: Text(t.arabic),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Provider.of<LanguageProvider>(
+                                      context,
+                                      listen: false,
+                                    ).changeLanguage('fr');
+                                    Navigator.pop(context);
+                                  },
+                                  child: Text(t.french),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // ✅ زر فضاء السكريتير
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.badge_outlined),
+                      label: Text(t.secretarySpace),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SecretaryCodeScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
+
+                const SizedBox(height: 10),
+
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    "سكرتير؟ ادخل عبر الكود الذي زوّدك به الطبيب.",
-                    style: theme.textTheme.bodySmall,
+                    t.secretaryHint,
+                    style: Theme.of(context).textTheme.bodySmall,
                     textAlign: TextAlign.right,
                   ),
                 ),
@@ -306,7 +360,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
-/// ------------------------------
-/// Placeholder للأدمن ... (كما هو)
-/// ------------------------------

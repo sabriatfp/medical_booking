@@ -1,18 +1,13 @@
-// lib/screens/notification_settings_screen.dart
 import 'package:flutter/material.dart';
-
-// ✅ Firestore فقط (بدون Messaging حالياً)
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-// ✅ إشعارات محلية فقط الآن للتجريب
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:medical_booking/services/push_service.dart';
 
-// إن لم يكن لديك تعريف UserRole بمكان آخر، استخدم هذا
 enum UserRole { doctor, patient }
 
 class NotificationSettingsScreen extends StatefulWidget {
   final UserRole role;
-  final String userId; // doctorId أو patientId (وليس uid)
+  final String userId;
 
   const NotificationSettingsScreen({
     super.key,
@@ -31,67 +26,74 @@ class _NotificationSettingsScreenState
 
   bool _loading = true;
   bool _saving = false;
-
-  /// يُحفظ في Firestore فقط الآن
   bool _allowPush = true;
 
   @override
   void initState() {
     super.initState();
+
     final collection = widget.role == UserRole.doctor ? 'doctors' : 'patients';
+
     _docRef = FirebaseFirestore.instance
         .collection(collection)
         .doc(widget.userId);
+
     _load();
   }
 
   Future<void> _load() async {
+    final t = AppLocalizations.of(context)!;
+
     try {
       final snap = await _docRef.get();
       final data = snap.data() ?? {};
+
       setState(() {
         _allowPush = (data['allowPush'] as bool?) ?? true;
         _loading = false;
       });
     } catch (e) {
       setState(() => _loading = false);
-      _snack('تعذر تحميل الإعدادات: $e');
+      _snack("${t.loadSettingsFailed}: $e");
     }
   }
 
   Future<void> _toggleAllow(bool value) async {
+    final t = AppLocalizations.of(context)!;
+
     setState(() {
       _allowPush = value;
       _saving = true;
     });
+
     try {
-      // نحفظ allowPush فقط الآن
       await _docRef.set({'allowPush': value}, SetOptions(merge: true));
 
-      // إشعار محلي لطيف عند التفعيل (بدون FCM حالياً)
       if (value) {
         await PushService.instance.showLocalNotification(
-          title: 'تم تفعيل الإشعارات',
-          body: 'سيتم إخطارك محليًا مؤقتًا (بدون FCM)',
+          title: t.notificationsEnabled,
+          body: t.notificationsEnabledMessage,
         );
       }
     } catch (e) {
-      // نرجّع القيمة بصريًا في حال فشل الحفظ
       setState(() => _allowPush = !value);
-      _snack('تعذر الحفظ: $e');
+      _snack("${t.saveFailed}: $e");
     } finally {
-      if (mounted) setState(() => _saving = false);
+      setState(() => _saving = false);
     }
   }
 
   Future<void> _sendTestLocal() async {
+    final t = AppLocalizations.of(context)!;
+
     if (!_allowPush) {
-      _snack('الإشعارات معطلة. فعّلها أولاً');
+      _snack(t.notificationsDisabled);
       return;
     }
+
     await PushService.instance.showLocalNotification(
-      title: 'إشعار تجريبي',
-      body: 'هذا إشعار محلي للتجربة (بدون FCM حاليًا)',
+      title: t.testNotificationTitle,
+      body: t.testNotificationMessage,
       data: {
         'route': '/home',
         'from': 'notification_settings',
@@ -100,24 +102,28 @@ class _NotificationSettingsScreenState
     );
   }
 
-  void _snack(String m) {
+  void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('إعدادات الإشعارات'),
+        title: Text(t.notificationSettings),
         actions: [
           if (_saving)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+              padding: EdgeInsets.all(12),
               child: SizedBox(
                 width: 18,
                 height: 18,
@@ -130,32 +136,28 @@ class _NotificationSettingsScreenState
         padding: const EdgeInsets.all(16),
         children: [
           SwitchListTile(
-            title: const Text('السماح باستلام الإشعارات'),
-            subtitle: const Text(
-              'في حال الإيقاف، لن تصلك الإشعارات لهذا الحساب',
-            ),
+            title: Text(t.allowNotifications),
+            subtitle: Text(t.allowNotificationsDescription),
             value: _allowPush,
             onChanged: _toggleAllow,
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 20),
           const Divider(),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.send),
-                  label: const Text('إشعار تجريبي (محلي)'),
-                  onPressed: _sendTestLocal,
-                ),
-              ),
-            ],
+          const SizedBox(height: 20),
+
+          ElevatedButton.icon(
+            onPressed: _sendTestLocal,
+            icon: const Icon(Icons.send),
+            label: Text(t.sendTestNotification),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'ملاحظة: تم تعطيل FCM مؤقتًا. سيتم تفعيل تخزين توكنات الأجهزة وإرسال الإشعارات السحابية عند تفعيل Firebase Messaging لاحقًا.',
-            style: TextStyle(color: Colors.grey),
+
+          const SizedBox(height: 20),
+
+          Text(
+            t.fcmDisabledNote,
             textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey),
           ),
         ],
       ),

@@ -171,28 +171,6 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
     }
   }
 
-  // تدفق تحقق رقم الهاتف عبر SMS (يفتح شاشة مصغّرة داخل التطبيق)
-  void _startPhoneVerificationFlow() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _PhoneVerificationScreen(
-          initialPhone: _phoneCtrl.text.trim(),
-          onVerified: (verifiedPhone) async {
-            _phoneCtrl.text = verifiedPhone;
-            try {
-              await _patientDoc.set({
-                'phone': verifiedPhone,
-              }, SetOptions(merge: true));
-              _showSnack('تم تحديث رقم الهاتف.');
-            } catch (e) {
-              _showSnack('تعذر تحديث رقم الهاتف في البيانات: $e');
-            }
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -287,14 +265,10 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
             TextFormField(
               controller: _phoneCtrl,
               keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'رقم الهاتف',
                 hintText: '+216 5x xxx xxx',
-                prefixIcon: const Icon(Icons.phone),
-                suffixIcon: TextButton(
-                  onPressed: _startPhoneVerificationFlow,
-                  child: const Text('تحقق عبر SMS'),
-                ),
+                prefixIcon: Icon(Icons.phone),
               ),
             ),
             const SizedBox(height: 24),
@@ -340,153 +314,6 @@ class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// شاشة مبسطة لتوثيق الهاتف عبر SMS وتحديثه في Auth
-class _PhoneVerificationScreen extends StatefulWidget {
-  final String initialPhone;
-  final ValueChanged<String> onVerified;
-
-  const _PhoneVerificationScreen({
-    required this.initialPhone,
-    required this.onVerified,
-  });
-
-  @override
-  State<_PhoneVerificationScreen> createState() =>
-      _PhoneVerificationScreenState();
-}
-
-class _PhoneVerificationScreenState extends State<_PhoneVerificationScreen> {
-  final _phoneCtrl = TextEditingController();
-  final _codeCtrl = TextEditingController();
-  String? _verificationId;
-  bool _sending = false;
-  bool _verifying = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _phoneCtrl.text = widget.initialPhone;
-  }
-
-  @override
-  void dispose() {
-    _phoneCtrl.dispose();
-    _codeCtrl.dispose();
-    super.dispose();
-  }
-
-  void _showSnack(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
-  Future<void> _sendCode() async {
-    final phone = _phoneCtrl.text.trim();
-    if (phone.isEmpty) {
-      _showSnack('أدخل رقم الهاتف أولاً');
-      return;
-    }
-    setState(() => _sending = true);
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: phone,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (credential) async {
-        // أحيانًا يتم التحقق التلقائي على Android
-        try {
-          final user = FirebaseAuth.instance.currentUser;
-          if (user != null) {
-            await user.updatePhoneNumber(credential);
-            widget.onVerified(phone);
-            if (mounted) Navigator.of(context).pop();
-          }
-        } catch (e) {
-          _showSnack('فشل التحقق التلقائي: $e');
-        }
-      },
-      verificationFailed: (e) {
-        _showSnack('فشل إرسال الرمز: ${e.message}');
-      },
-      codeSent: (verificationId, resendToken) {
-        _verificationId = verificationId;
-        _showSnack('تم إرسال رمز التحقق عبر SMS.');
-      },
-      codeAutoRetrievalTimeout: (verificationId) {
-        _verificationId = verificationId;
-      },
-    );
-    if (mounted) setState(() => _sending = false);
-  }
-
-  Future<void> _verifyCode() async {
-    final code = _codeCtrl.text.trim();
-    if ((_verificationId ?? '').isEmpty || code.isEmpty) {
-      _showSnack('أدخل الرمز الذي وصلك عبر SMS');
-      return;
-    }
-    setState(() => _verifying = true);
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId!,
-        smsCode: code,
-      );
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        _showSnack('لا يوجد مستخدم مسجل دخول.');
-        setState(() => _verifying = false);
-        return;
-      }
-      await user.updatePhoneNumber(credential);
-      widget.onVerified(_phoneCtrl.text.trim());
-      if (mounted) Navigator.of(context).pop();
-    } on FirebaseAuthException catch (e) {
-      _showSnack('فشل التحقق: ${e.message ?? e.code}');
-    } catch (e) {
-      _showSnack('خطأ أثناء التحقق: $e');
-    } finally {
-      if (mounted) setState(() => _verifying = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('تحقق رقم الهاتف')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextFormField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'رقم الهاتف',
-              prefixIcon: Icon(Icons.phone),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _sending ? null : _sendCode,
-            icon: const Icon(Icons.sms),
-            label: Text(_sending ? 'جار الإرسال...' : 'إرسال رمز عبر SMS'),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _codeCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'رمز التحقق',
-              prefixIcon: Icon(Icons.shield),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _verifying ? null : _verifyCode,
-            icon: const Icon(Icons.verified),
-            label: Text(_verifying ? 'جار التحقق...' : 'تأكيد الرمز'),
-          ),
-        ],
       ),
     );
   }

@@ -1,11 +1,15 @@
+// lib/services/appointment_service.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// خدمة إدارة المواعيد (للطبيب أو السكريتير أو النظام)
 class AppointmentService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final String currentUid;
 
   AppointmentService(this.currentUid);
 
+  /// ✅ تأكيد الموعد (Doctor or Secretary)
   Future<void> confirm(String apptId) async {
     await _db.collection('appointments').doc(apptId).update({
       'status': 'confirmed',
@@ -14,6 +18,7 @@ class AppointmentService {
     });
   }
 
+  /// ✅ تسجيل الحضور (Check‑in)
   Future<void> checkIn(String apptId) async {
     await _db.collection('appointments').doc(apptId).update({
       'status': 'checked_in',
@@ -22,13 +27,15 @@ class AppointmentService {
     });
   }
 
-  /// تحويل كل مواعيد "اليوم المحدد" التي بقيت confirmed ولم تُسجّل حضوراً إلى no_show.
-  /// يعمل يدوياً عبر زرّ أو تلقائياً عند فتح الشاشة بعد نهاية الدوام.
+  /// ✅ تحويل كل مواعيد اليوم (confirmed → no_show) إذا لم يحضر أصحابها
+  /// يُستخدم عادة:
+  /// - عند نهاية اليوم تلقائياً
+  /// - عند ضغط زر «تحديث الغياب»
   Future<int> markDayNoShows({
     required String doctorId,
-    required DateTime dayLocal, // اليوم المحلي (بدون وقت)
+    required DateTime dayLocal,
   }) async {
-    // نحسب نافذة اليوم محلياً ثم نحوّل إلى UTC
+    // اليوم المحلي من 00:00 إلى 23:59
     final localStart = DateTime(
       dayLocal.year,
       dayLocal.month,
@@ -39,9 +46,11 @@ class AppointmentService {
     );
     final localEnd = localStart.add(const Duration(days: 1));
 
+    // تحويل للنطاق UTC (Firestore)
     final startUtc = localStart.toUtc();
     final endUtc = localEnd.toUtc();
 
+    // نبحث فقط في المواعيد المؤكدة (confirmed)
     final q = await _db
         .collection('appointments')
         .where('doctorId', isEqualTo: doctorId)
@@ -54,6 +63,7 @@ class AppointmentService {
     if (q.docs.isEmpty) return 0;
 
     final batch = _db.batch();
+
     for (final d in q.docs) {
       batch.update(d.reference, {
         'status': 'no_show',
@@ -61,6 +71,7 @@ class AppointmentService {
         'noShowBy': currentUid,
       });
     }
+
     await batch.commit();
     return q.docs.length;
   }

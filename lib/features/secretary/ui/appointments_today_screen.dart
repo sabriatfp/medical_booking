@@ -1,23 +1,19 @@
+// lib/screens/doctor/appointments_today_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 
-/// شاشة مواعيد اليوم.
-/// - في فضاء السكريتير: مرّر doctorId + hideInnerHeader:true + (اختياري asSecretary:true)
-/// - في وضع الطبيب: اترك asSecretary=false ومرّر doctorId إن كنت تستنتجه خارجيًا.
 class AppointmentsTodayScreen extends StatefulWidget {
   final String doctorId;
-
-  /// هل المستخدم الحالي سكريتير (لإظهار أزرار Check-in / No-show)؟
   final bool asSecretary;
-
-  /// NEW: إخفاء الهيدر الداخلي (العنوان + السهم) عندما نكون داخل فضاء السكريتير
   final bool hideInnerHeader;
 
   const AppointmentsTodayScreen({
     super.key,
     required this.doctorId,
     this.asSecretary = true,
-    this.hideInnerHeader = false, // الافتراضي لا نخفي، نُخفي من فضاء السكريتير
+    this.hideInnerHeader = false,
   });
 
   @override
@@ -38,7 +34,6 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _todayAppointmentsStream() {
-    // لو عندك dateTime مخزَّن Timestamp (موصى به)
     return FirebaseFirestore.instance
         .collection('appointments')
         .where('doctorId', isEqualTo: widget.doctorId)
@@ -49,47 +44,51 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
   }
 
   Future<void> _updateStatus(String apptId, String status) async {
-    await FirebaseFirestore.instance.collection('appointments').doc(apptId).update({
-      'status': status,
-      'statusUpdatedAt': FieldValue.serverTimestamp(),
-      'statusBy': {
-        'role': widget.asSecretary ? 'secretary' : 'doctor',
-        // uid يلتقط من Auth في سيرفيسك عادة؛ هنا نتركه اختياريًا لو تحب تضيفه من خارج
-      },
-    });
+    await FirebaseFirestore.instance
+        .collection('appointments')
+        .doc(apptId)
+        .update({
+          'status': status,
+          'statusUpdatedAt': FieldValue.serverTimestamp(),
+          'statusBy': {'role': widget.asSecretary ? 'secretary' : 'doctor'},
+        });
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     return Scaffold(
-      // ❗ لا نعرض AppBar داخلي عندما نكون في فضاء السكريتير
       appBar: widget.hideInnerHeader
           ? null
-          : AppBar(title: const Text('مواعيد اليوم')),
+          : AppBar(title: Text(t.todayAppointments)),
+
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _todayAppointmentsStream(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator());
           }
+
           if (snap.hasError) {
-            return const Center(child: Text('خطأ في تحميل مواعيد اليوم'));
+            return Center(child: Text(t.loadTodayError));
           }
 
           final docs = snap.data?.docs ?? [];
           if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد مواعيد اليوم'));
+            return Center(child: Text(t.noAppointmentsToday));
           }
 
           return ListView.separated(
             padding: const EdgeInsets.all(12),
             itemCount: docs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+
             itemBuilder: (context, i) {
               final ref = docs[i].reference;
               final d = docs[i].data();
 
-              final patientName = (d['patientName'] ?? 'مريض').toString();
+              final patientName = (d['patientName'] ?? t.patient).toString();
               final patientPhone = (d['patientPhone'] ?? '').toString();
               final status = (d['status'] ?? 'pending').toString();
 
@@ -109,7 +108,6 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
                 _ => Colors.orange,
               };
 
-              // السكريتير حصريًا: Check-in / No-show
               final canCheckIn = widget.asSecretary && status == 'confirmed';
               final canNoShow =
                   widget.asSecretary &&
@@ -119,26 +117,21 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
 
               return Card(
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
                   leading: CircleAvatar(
                     backgroundColor: statusColor.withOpacity(.15),
                     child: Icon(Icons.person, color: statusColor),
                   ),
+
                   title: Row(
                     children: [
                       Expanded(
                         child: Text(
                           patientName,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
-                      const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 4,
                         ),
@@ -147,7 +140,7 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Text(
-                          _statusLabel(status),
+                          _statusLabel(status, t),
                           style: TextStyle(
                             color: statusColor,
                             fontSize: 11,
@@ -157,55 +150,49 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
                       ),
                     ],
                   ),
+
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      "الوقت: $timeLabel • الهاتف: ${patientPhone.isEmpty ? 'غير متوفر' : patientPhone}",
+                      "${t.time}: $timeLabel • "
+                      "${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}",
                     ),
                   ),
 
-                  // أزرار الإجراءات (للسكريتير فقط)
                   trailing: widget.asSecretary
                       ? Wrap(
                           spacing: 6,
                           children: [
                             if (canCheckIn)
                               _miniBtn(
-                                label: 'حضور',
+                                label: t.checkIn,
                                 color: Colors.blue,
                                 onTap: () async {
                                   try {
                                     await _updateStatus(ref.id, 'checked_in');
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('تم تسجيل الحضور'),
-                                      ),
+                                      SnackBar(content: Text(t.checkedIn)),
                                     );
-                                  } on FirebaseException catch (e) {
-                                    _showPermSnack(context, e);
                                   } catch (e) {
-                                    _showError(context, e);
+                                    _showError(context, e, t);
                                   }
                                 },
                               ),
+
                             if (canNoShow)
                               _miniBtn(
-                                label: 'لم يحضر',
+                                label: t.noShow,
                                 color: Colors.deepOrange,
                                 onTap: () async {
                                   try {
                                     await _updateStatus(ref.id, 'no_show');
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('تم وضع الحالة: لم يحضر'),
-                                      ),
+                                      SnackBar(content: Text(t.noShowSet)),
                                     );
-                                  } on FirebaseException catch (e) {
-                                    _showPermSnack(context, e);
                                   } catch (e) {
-                                    _showError(context, e);
+                                    _showError(context, e, t);
                                   }
                                 },
                               ),
@@ -221,14 +208,14 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
     );
   }
 
-  String _statusLabel(String s) {
+  String _statusLabel(String s, AppLocalizations t) {
     return switch (s) {
-      'confirmed' => 'مؤكّد',
-      'checked_in' => 'حاضر',
-      'no_show' => 'لم يحضر',
-      'canceled' => 'ملغى',
-      'pending' => 'قيد الانتظار',
-      'requested' => 'طلب حجز',
+      'confirmed' => t.statusConfirmed,
+      'checked_in' => t.checkedInShort,
+      'no_show' => t.noShow,
+      'canceled' => t.statusCanceled,
+      'pending' => t.statusPending,
+      'requested' => t.requested,
       _ => s,
     };
   }
@@ -243,31 +230,19 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
       style: ElevatedButton.styleFrom(
         foregroundColor: Colors.white,
         backgroundColor: color,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        minimumSize: const Size(10, 36),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        minimumSize: Size(10, 36),
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       ),
     );
   }
 
-  void _showPermSnack(BuildContext context, FirebaseException e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          e.code == 'permission-denied'
-              ? 'صلاحيات غير كافية. تأكّد من قواعد Firestore وجلسة السكريتير.'
-              : 'تعذّر تنفيذ العملية: ${e.code}',
-        ),
-      ),
-    );
-  }
-
-  void _showError(BuildContext context, Object e) {
+  void _showError(BuildContext context, Object e, AppLocalizations t) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('خطأ غير متوقع: $e')));
+    ).showSnackBar(SnackBar(content: Text("${t.unexpectedError}: $e")));
   }
 }

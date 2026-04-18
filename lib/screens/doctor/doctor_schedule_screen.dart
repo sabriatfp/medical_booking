@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import '../../services/doctor_service.dart';
 
 class DoctorScheduleScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   int? slotDuration;
   int? selectedSlot;
 
-  final List<String> weekDays = const [
+  final List<String> weekDays = [
     "الإثنين",
     "الثلاثاء",
     "الأربعاء",
@@ -51,10 +52,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     "الأحد": {"available": false, "start": "08:00", "end": "16:00"},
   };
 
-  /// NEW: جميع الأيام الاستثنائية (من doctor_days_off)
   Set<String> exceptionalDaysOff = {};
-
-  /// NEW: weeks سيحتوي الآن أيضًا على slots
   List<Map<String, dynamic>> weeks = [];
 
   @override
@@ -63,7 +61,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     _resolveDoctorId();
   }
 
-  /// NEW — دالة توليد الفترات بالساعات
+  // -------------------------------
+  // توليد الفترات الزمنية
+  // -------------------------------
   List<String> generateSlots(String start, String end, int duration) {
     final s = start.split(":");
     final e = end.split(":");
@@ -83,31 +83,52 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     return out;
   }
 
-  /// تحميل doctorId + العطل الاستثنائية قبل توليد weeks
+  // -------------------------------
+  // تحميل doctorId + جدول العمل
+  // -------------------------------
   Future<void> _resolveDoctorId() async {
     try {
+      // 1️⃣ تحديد doctorId
       if (widget.doctorId != null && widget.doctorId!.isNotEmpty) {
         _resolvedDoctorId = widget.doctorId;
       } else {
         _resolvedDoctorId = await DoctorService().getDoctorId();
       }
 
-      if (_resolvedDoctorId == null || _resolvedDoctorId!.isEmpty) {
-        _error = 'لم يتم العثور على معرف الطبيب';
-      } else {
-        await _loadDoctorSchedule();
-        await _loadExceptionalDaysOff();
-        _generateThreeWeeks();
-        await _updateFullDays();
+      if (_resolvedDoctorId == null) {
+        _error = AppLocalizations.of(context)!.errorFindingDoctorId;
+        return;
       }
+
+      // 2️⃣ تحميل بيانات الطبيب الأساسية
+      await _loadDoctorSchedule();
+
+      // 3️⃣ تحميل أيام العطل
+      await _loadExceptionalDaysOff();
+
+      // ✅ 4️⃣ تطبيق Rolling هنا (المكان الصحيح)
+      if (slotDuration != null && slotDuration! > 0) {
+        await DoctorService.normalizeRollingWeeks(
+          doctorId: _resolvedDoctorId!,
+          weeklyTemplate: weeklyTemplate,
+          exceptionalDaysOff: exceptionalDaysOff,
+          slotDuration: slotDuration!,
+        );
+
+        // ✅ 5️⃣ إعادة تحميل الجدول بعد التطبيع
+        await _loadDoctorSchedule();
+      }
+
+      // 6️⃣ تحديث الأيام الممتلئة
+      await _updateFullDays();
     } catch (e) {
-      _error = "خطأ أثناء تحديد الطبيب";
+      _error = AppLocalizations.of(context)!.unexpectedError;
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  /// NEW — تحميل كل أيام العطل الاستثنائية doctor_days_off
+  // تحميل أيام العطل الاستثنائية
   Future<void> _loadExceptionalDaysOff() async {
     if (_resolvedDoctorId == null) return;
 
@@ -121,7 +142,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
         .toSet();
   }
 
-  /// تحميل slotDuration + weeklyTemplate + weeks
+  // تحميل slotDuration + weeklyTemplate + weeks
   Future<void> _loadDoctorSchedule() async {
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
@@ -156,6 +177,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     }
   }
 
+  // دوال الأسبوع — نفس المنطق
   DateTime _nextMonday(DateTime from) {
     int diff = (DateTime.monday - from.weekday) % 7;
     if (diff == 0) diff = 7;
@@ -166,34 +188,32 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return 0;
 
-    final start = DateTime(day.year, day.month, day.day, 0, 0, 0);
-    final end = DateTime(day.year, day.month, day.day, 23, 59, 59);
+    try {
+      final start = DateTime(day.year, day.month, day.day, 0, 0, 0);
+      final end = DateTime(day.year, day.month, day.day, 23, 59, 59);
 
-    final query = await FirebaseFirestore.instance
-        .collection('appointments')
-        .where('doctorId', isEqualTo: doctorId)
-        .where('dateTime', isGreaterThanOrEqualTo: start)
-        .where('dateTime', isLessThanOrEqualTo: end)
-        .get();
+      final query = await FirebaseFirestore.instance
+          .collection('appointments')
+          .where('doctorId', isEqualTo: doctorId)
+          .where('dateTime', isGreaterThanOrEqualTo: start)
+          .where('dateTime', isLessThanOrEqualTo: end)
+          .get();
 
-    int count = 0;
-
-    for (var doc in query.docs) {
-      final d = doc.data();
-      final s = (d['status'] ?? '').toString();
-
-      // نحتسب فقط المواعيد الفعلية (pending أو confirmed)
-      if (s == 'pending' || s == 'confirmed') {
-        count++;
+      int count = 0;
+      for (var doc in query.docs) {
+        final status = doc.data()['status'];
+        if (status == 'pending' || status == 'confirmed') count++;
       }
+      return count;
+    } catch (e) {
+      debugPrint("❌ getAppointmentsCount ERROR: $e");
+      return 0; // 👈 مهم جدًا حتى لا ينهار التطبيق
     }
-
-    return count;
   }
 
-  // --------------------------
-  // NEW — توليد أيام الأسبوع مع إضافة slots واحترام العطل الاستثنائية
-  // --------------------------
+  // -------------------------------
+  // توليد أسبوع كامل مع slots
+  // -------------------------------
   List<Map<String, dynamic>> _generateWeekDays(DateTime startDate) {
     final List<Map<String, dynamic>> output = [];
 
@@ -201,13 +221,22 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
       final d = startDate.add(Duration(days: i));
       final dateStr = DateFormat("yyyy-MM-dd").format(d);
       final dayName = weekDays[d.weekday - 1];
-      final tmpl = weeklyTemplate[dayName]!;
+      final tmpl = weeklyTemplate[dayName];
 
+      if (tmpl == null) {
+        output.add({
+          "date": dateStr,
+          "available": false,
+          "start": null,
+          "end": null,
+          "slots": [],
+          "full": true,
+        });
+        continue;
+      }
       bool isDayOff = exceptionalDaysOff.contains(dateStr);
-
       bool available = tmpl["available"] == true && !isDayOff;
 
-      // NEW — توليد slots بناءً على start/end/duration
       List<String> slots = [];
       if (available && slotDuration != null) {
         slots = generateSlots(tmpl["start"], tmpl["end"], slotDuration!);
@@ -218,7 +247,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
         "available": available,
         "start": tmpl["start"],
         "end": tmpl["end"],
-        "slots": slots, // NEW 🔥
+        "slots": slots,
         "full": false,
       });
     }
@@ -226,39 +255,11 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     return output;
   }
 
-  // --------------------------
-  // توليد 3 أسابيع (21 يوم)
-  // --------------------------
-  void _generateThreeWeeks() {
-    final today = DateTime.now();
-    final w1Start = _nextMonday(today);
-
-    weeks = [];
-
-    weeks.add({
-      "startDate": w1Start.toIso8601String(),
-      "days": _generateWeekDays(w1Start),
-    });
-
-    final w2Start = w1Start.add(const Duration(days: 7));
-    weeks.add({
-      "startDate": w2Start.toIso8601String(),
-      "days": _generateWeekDays(w2Start),
-    });
-
-    final w3Start = w1Start.add(const Duration(days: 14));
-    weeks.add({
-      "startDate": w3Start.toIso8601String(),
-      "days": _generateWeekDays(w3Start),
-    });
-
-    if (mounted) setState(() {});
-  }
-
-  // --------------------------
-  // تحديث حالة الأيام الممتلئة (full)
-  // --------------------------
+  // -------------------------------
+  // تحديث حالة الأيام الممتلئة
+  // -------------------------------
   Future<void> _updateFullDays() async {
+    if (weeks.isEmpty) return;
     if (slotDuration == null) return;
 
     for (var w in weeks) {
@@ -269,14 +270,14 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
         }
 
         final date = DateTime.parse(day["date"]);
-
-        // عدد الساعات المولدة
         final maxSlots = (day["slots"] as List?)?.length ?? 0;
-
-        // عدد المواعيد المحجوزة فعلياً
         final count = await _getAppointmentsCount(date);
 
-        day["full"] = count >= maxSlots;
+        if (maxSlots == 0) {
+          day["full"] = false;
+        } else {
+          day["full"] = count >= maxSlots;
+        }
       }
     }
 
@@ -284,10 +285,11 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   }
 
   // ------------------------------------------------
-  // UI يبدأ هنا (لا تغيير في الـ UI نهائياً)
+  //                 UI يبدأ هنا
   // ------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
 
     if (_loading) {
@@ -298,7 +300,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
       return Scaffold(
         appBar: widget.hideInnerHeader
             ? null
-            : AppBar(title: const Text("إعدادات التوقيت")),
+            : AppBar(title: Text(t.scheduleSettings)),
         body: Center(child: Text(_error!)),
       );
     }
@@ -308,12 +310,13 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     return Scaffold(
       appBar: widget.hideInnerHeader
           ? null
-          : AppBar(title: const Text("إعدادات التوقيت")),
+          : AppBar(title: Text(t.scheduleSettings)),
+
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // --------------------------------------------
-          // مدة الفحص الطبي (UI كما هو بدون أي تغيير)
+          //        مدة الفحص الطبي (Slot Duration)
           // --------------------------------------------
           Card(
             child: Padding(
@@ -321,12 +324,15 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "مدة الفحص الطبي (Slot Duration)",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    t.slotDurationTitle,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  // اختيار مدة الفحص UI كما هو
+
                   if (slotDuration == null)
                     Container(
                       width: double.infinity,
@@ -340,7 +346,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        "لم يتم تحديد مدة الفحص بعد",
+                        t.slotDurationNotSet,
                         style: TextStyle(
                           color: scheme.onSecondaryContainer,
                           fontWeight: FontWeight.w600,
@@ -371,7 +377,6 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOut,
                         decoration: BoxDecoration(
                           color: bgColor,
                           borderRadius: BorderRadius.circular(22),
@@ -400,7 +405,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                 ),
                               const SizedBox(width: 6),
                               Text(
-                                "$v دقيقة",
+                                t.minutesLabel(v),
                                 style: TextStyle(
                                   color: fgColor,
                                   fontWeight: isActive
@@ -429,7 +434,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                     alignment: Alignment.centerRight,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.check_circle),
-                      label: const Text("تفعيل"),
+                      label: Text(t.enable),
                       onPressed: (selectedSlot == null)
                           ? null
                           : () async {
@@ -442,26 +447,32 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                       'slotDuration': v,
                                     }, SetOptions(merge: true));
 
-                                setState(() {
-                                  slotDuration = v;
-                                });
+                                setState(() => slotDuration = v);
 
-                                // إعادة حساب الأيام
-                                _generateThreeWeeks();
+                                // ✅ شغّل rolling فورًا
+                                await DoctorService.normalizeRollingWeeks(
+                                  doctorId: doctorId,
+                                  weeklyTemplate: weeklyTemplate,
+                                  exceptionalDaysOff: exceptionalDaysOff,
+                                  slotDuration: v,
+                                );
+
+                                // ✅ أعد التحميل
+                                await _loadDoctorSchedule();
+
+                                // ✅ ثم احسب full days
                                 await _updateFullDays();
 
                                 if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      "تم تفعيل مدة الفحص: $v دقيقة",
-                                    ),
-                                  ),
+                                  SnackBar(content: Text(t.slotEnabled(v))),
                                 );
                               } catch (e) {
                                 if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text("تعذّر التفعيل: $e")),
+                                  SnackBar(
+                                    content: Text("${t.enableFailed}: $e"),
+                                  ),
                                 );
                               }
                             },
@@ -475,7 +486,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
           const SizedBox(height: 20),
 
           // --------------------------------------------
-          // النموذج الأسبوعي الأساسي (UI كما هو)
+          //       النموذج الأسبوعي الأساسي
           // --------------------------------------------
           Card(
             child: Padding(
@@ -483,9 +494,12 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "النموذج الأسبوعي الأساسي",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    t.weeklyTemplateTitle,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 12),
 
@@ -507,9 +521,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                               Switch(
                                 value: available,
                                 onChanged: (v) {
-                                  setState(
-                                    () => weeklyTemplate[day]!["available"] = v,
-                                  );
+                                  setState(() => d["available"] = v);
                                 },
                               ),
                             ],
@@ -523,17 +535,17 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                   Expanded(
                                     child: InkWell(
                                       onTap: () async {
-                                        final t = await pickTime(
+                                        final tPicked = await pickTime(
                                           context,
                                           d["start"],
                                         );
-                                        if (t != null) {
-                                          setState(() => d["start"] = t);
+                                        if (tPicked != null) {
+                                          setState(() => d["start"] = tPicked);
                                         }
                                       },
                                       child: _timeBox(
                                         icon: Icons.access_time,
-                                        label: "بداية",
+                                        label: t.startLabel,
                                         value: d["start"],
                                       ),
                                     ),
@@ -542,17 +554,17 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                                   Expanded(
                                     child: InkWell(
                                       onTap: () async {
-                                        final t = await pickTime(
+                                        final tPicked = await pickTime(
                                           context,
                                           d["end"],
                                         );
-                                        if (t != null) {
-                                          setState(() => d["end"] = t);
+                                        if (tPicked != null) {
+                                          setState(() => d["end"] = tPicked);
                                         }
                                       },
                                       child: _timeBox(
                                         icon: Icons.access_time,
-                                        label: "نهاية",
+                                        label: t.endLabel,
                                         value: d["end"],
                                       ),
                                     ),
@@ -570,15 +582,14 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 20),
 
-          // ---------------------------------------------------
+          // --------------------------------------------
           // تخصيص الأسابيع القادمة (21 يومًا)
-          // ---------------------------------------------------
-          const Text(
-            "تخصيص الأسابيع القادمة (21 يومًا)",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          // --------------------------------------------
+          Text(
+            t.customizeUpcomingWeeks,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 12),
@@ -589,11 +600,10 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
               final startDate = DateTime.parse(
                 w["startDate"].toString().trim(),
               );
-
               final days = w["days"] as List;
 
               final title =
-                  "الأسبوع ${i + 1} (${startDate.day}/${startDate.month})";
+                  "${t.weekLabel(i + 1)} (${startDate.day}/${startDate.month})";
 
               return Card(
                 child: ExpansionTile(
@@ -602,7 +612,9 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                     return ListTile(
                       leading: d["full"] == true ? _redDot() : const SizedBox(),
                       title: Text(d["date"]),
-                      subtitle: Text("من ${d["start"]} إلى ${d["end"]}"),
+                      subtitle: Text(
+                        "${t.from} ${d["start"]} ${t.to} ${d["end"]}",
+                      ),
                       trailing: Switch(
                         value: d["available"] == true,
                         onChanged: (v) {
@@ -617,21 +629,22 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
           ),
 
           const SizedBox(height: 30),
+
           // --------------------------------------------
-          // حفظ الإعدادات (مع حفظ slots داخل weeks)
+          // حفظ الإعدادات (Save)
           // --------------------------------------------
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
+              icon: const Icon(Icons.save),
+              label: Text(t.saveSettings),
               onPressed: () async {
                 await _saveDoctorSchedule();
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("تم حفظ الإعدادات بنجاح")),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(t.settingsSaved)));
               },
-              icon: const Icon(Icons.save),
-              label: const Text("حفظ الإعدادات"),
             ),
           ),
         ],
@@ -640,7 +653,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   }
 
   // -------------------------------
-  // UI helpers
+  // UI Helper Widgets
   // -------------------------------
   Widget _timeBox({
     required IconData icon,
@@ -678,27 +691,51 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
   // حفظ weeks + weeklyTemplate + slotDuration
   // ---------------------------------------------
   Future<void> _saveDoctorSchedule() async {
+    final t = AppLocalizations.of(context)!;
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
 
-    // ✅ إعادة توليد weeks لضمان slots الجديدة
-    _generateThreeWeeks();
-    await _updateFullDays();
-
+    // 1️⃣ حفظ الإعدادات التي عدّلها الطبيب
     await FirebaseFirestore.instance.collection('doctors').doc(doctorId).set({
       "slotDuration": slotDuration,
       "weeklyTemplate": weeklyTemplate,
-      "weeks": weeks, // ✅ يحتوي الآن على slots + availability + full
+      "weeks": weeks,
       "ownerUid": FirebaseAuth.instance.currentUser!.uid,
     }, SetOptions(merge: true));
+
+    // 2️⃣ تطبيق Rolling بعد الحفظ ✅
+    if (slotDuration != null) {
+      await DoctorService.normalizeRollingWeeks(
+        doctorId: doctorId,
+        weeklyTemplate: weeklyTemplate,
+        exceptionalDaysOff: exceptionalDaysOff,
+        slotDuration: slotDuration!,
+      );
+    }
+
+    // 3️⃣ إعادة تحميل الجدول بعد rolling
+    await _loadDoctorSchedule();
+
+    // 4️⃣ تحديث حالة الأيام الممتلئة
+    await _updateFullDays();
   }
 }
 
-/// اختيار وقت بصيغة HH:mm
+/// اختيار وقت HH:mm مترجم
 Future<String?> pickTime(BuildContext context, String initial) async {
+  final t = AppLocalizations.of(context)!;
+
   final parts = initial.split(":");
-  final t = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-  final res = await showTimePicker(context: context, initialTime: t);
+  final initialTime = TimeOfDay(
+    hour: int.parse(parts[0]),
+    minute: int.parse(parts[1]),
+  );
+
+  final res = await showTimePicker(
+    context: context,
+    initialTime: initialTime,
+    helpText: t.selectTime, // ✅ النص المستخدم في نافذة اختيار الوقت
+  );
 
   if (res == null) return null;
 

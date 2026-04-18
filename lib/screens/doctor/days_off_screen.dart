@@ -1,6 +1,7 @@
 // lib/screens/doctor/days_off_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import '../../services/doctor_service.dart';
 
 class DaysOffScreen extends StatefulWidget {
@@ -34,7 +35,10 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
   @override
   void initState() {
     super.initState();
-    _resolveDoctorId();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resolveDoctorId();
+    });
   }
 
   Future<void> _resolveDoctorId() async {
@@ -45,24 +49,36 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
         _resolvedDoctorId = await _doctorService.getDoctorId();
       }
 
-      if (_resolvedDoctorId == null || _resolvedDoctorId!.isEmpty) {
-        _error = 'لم يتم العثور على معرف الطبيب';
+      if (_resolvedDoctorId == null) {
+        if (!mounted) return;
+        final t = AppLocalizations.of(context)!;
+        setState(() {
+          _error = t.doctorIdNotFound;
+          _loadingDoctor = false;
+        });
+        return;
       }
-    } catch (e) {
-      _error = 'خطأ أثناء تحديد الطبيب';
-    } finally {
+
       if (mounted) setState(() => _loadingDoctor = false);
+    } catch (e) {
+      if (!mounted) return;
+      final t = AppLocalizations.of(context)!;
+      setState(() {
+        _error = t.errorFindingDoctor;
+        _loadingDoctor = false;
+      });
     }
   }
 
-  // ✅ اختيار فترة الغياب
+  // ✅ Pick date range
   Future<void> _pickDateRange() async {
     final now = DateTime.now();
+
     final range = await showDateRangePicker(
       context: context,
       firstDate: now,
       lastDate: DateTime(now.year + 1),
-      locale: const Locale('ar'),
+      locale: const Locale('fr'),
     );
 
     if (range == null) return;
@@ -73,8 +89,10 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
     });
   }
 
-  // ✅ حفظ أيام الغياب + إلغاء المواعيد المتعارضة
+  // ✅ Save days off + cancel conflicting appointments
   Future<void> _saveDaysOff() async {
+    final t = AppLocalizations.of(context)!;
+
     final doctorId = _resolvedDoctorId;
 
     if (doctorId == null || _startDate == null || _endDate == null) return;
@@ -93,9 +111,8 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
 
       addedDates.add(dateStr);
 
-      final dayOffRef = fs.collection('doctor_days_off').doc();
-
-      batch.set(dayOffRef, {
+      final ref = fs.collection('doctor_days_off').doc();
+      batch.set(ref, {
         "doctorId": doctorId,
         "date": dateStr,
         "reason": reason,
@@ -105,7 +122,6 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
       current = current.add(const Duration(days: 1));
     }
 
-    // ✅ إلغاء جميع المواعيد ضمن الفترة
     final apptsSnap = await fs
         .collection('appointments')
         .where('doctorId', isEqualTo: doctorId)
@@ -121,9 +137,9 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
             "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
 
         if (addedDates.contains(dateStr)) {
-          final slotId = data["slotId"];
           batch.update(doc.reference, {"status": "canceled"});
 
+          final slotId = data["slotId"];
           if (slotId != null && slotId is String) {
             batch.update(fs.collection('doctor_slots').doc(slotId), {
               "taken": false,
@@ -142,16 +158,15 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
     });
 
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("تم حفظ أيام الغياب وإلغاء المواعيد المتعارضة"),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(t.daysOffSaved)));
   }
 
-  // ✅ حذف يوم غياب واحد
+  // ✅ Delete a day off
   Future<void> _deleteDayOff(DocumentSnapshot doc) async {
+    final t = AppLocalizations.of(context)!;
+
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
 
@@ -160,10 +175,8 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
 
     final dateStr = (doc['date'] ?? '').toString();
 
-    // حذف يوم الغياب
     batch.delete(doc.reference);
 
-    // إعادة فتح جميع slots لذلك اليوم
     final slotsSnap = await fs
         .collection('doctor_slots')
         .where('doctorId', isEqualTo: doctorId)
@@ -178,9 +191,9 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("تم حذف يوم الغياب وإعادة فتح المواعيد")),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(t.dayOffDeleted)));
   }
 
   @override
@@ -191,15 +204,15 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     if (_loadingDoctor) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null) {
       return Scaffold(
-        appBar: widget.hideInnerHeader
-            ? null
-            : AppBar(title: const Text("أيام الغياب")),
+        appBar: widget.hideInnerHeader ? null : AppBar(title: Text(t.daysOff)),
         body: Center(child: Text(_error!)),
       );
     }
@@ -207,21 +220,21 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
     final doctorId = _resolvedDoctorId!;
 
     return Scaffold(
-      appBar: widget.hideInnerHeader
-          ? null
-          : AppBar(title: const Text("أيام الغياب")),
+      appBar: widget.hideInnerHeader ? null : AppBar(title: Text(t.daysOff)),
+
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // ✅ اختيار فترة الغياب
             TextButton.icon(
               onPressed: _pickDateRange,
               icon: const Icon(Icons.date_range),
               label: Text(
                 _startDate == null
-                    ? "اختيار فترة الغياب"
-                    : "من ${_startDate!.day}/${_startDate!.month} "
-                          "إلى ${_endDate!.day}/${_endDate!.month}",
+                    ? t.pickDaysOffRange
+                    : "${t.from} ${_startDate!.day}/${_startDate!.month} "
+                          "${t.to} ${_endDate!.day}/${_endDate!.month}",
               ),
             ),
 
@@ -229,9 +242,9 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
 
             TextField(
               controller: _reasonController,
-              decoration: const InputDecoration(
-                labelText: "سبب الغياب (اختياري)",
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t.reasonOptional,
+                border: const OutlineInputBorder(),
               ),
             ),
 
@@ -241,21 +254,21 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _saveDaysOff,
-                child: const Text("حفظ"),
+                child: Text(t.save),
               ),
             ),
 
             const Divider(height: 32),
 
-            const Align(
+            Align(
               alignment: Alignment.centerRight,
               child: Text(
-                "أيام الغياب المسجلة:",
-                style: TextStyle(fontWeight: FontWeight.bold),
+                t.savedDaysOff,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
 
-            // ✅ عرض الأيام المسجلة
+            // ✅ قائمة أيام الغياب
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -269,13 +282,13 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
                   }
 
                   if (snap.hasError) {
-                    return const Center(child: Text("خطأ في تحميل البيانات"));
+                    return Center(child: Text(t.errorLoadingData));
                   }
 
                   final docs = snap.data?.docs ?? [];
 
                   if (docs.isEmpty) {
-                    return const Center(child: Text("لا توجد أيام غياب مسجلة"));
+                    return Center(child: Text(t.noDaysOff));
                   }
 
                   return ListView.builder(
@@ -285,10 +298,10 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
                       return Card(
                         child: ListTile(
                           title: Text(d['date'] ?? ''),
-                          subtitle: Text(d['reason'] ?? ""),
+                          subtitle: Text(d['reason'] ?? ''),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
-                            tooltip: 'حذف يوم الغياب',
+                            tooltip: t.deleteDayOff,
                             onPressed: () => _deleteDayOff(d),
                           ),
                         ),

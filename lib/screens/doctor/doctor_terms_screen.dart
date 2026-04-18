@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'doctor_register_screen.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
+import 'package:medical_booking/screens/signup_screen.dart';
 
 class DoctorTermsScreen extends StatefulWidget {
   const DoctorTermsScreen({super.key});
@@ -13,57 +14,62 @@ class _DoctorTermsScreenState extends State<DoctorTermsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('شروط حساب الطبيب')),
+      appBar: AppBar(title: Text(t.doctorTerms), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // ===============================
+            // ✅ نص التعهد
+            // ===============================
             Expanded(
               child: Card(
                 elevation: 1,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: SingleChildScrollView(
                     child: Text(
-                      '''
-إقرار وتعهد خاص بحسابات الأطباء
-
-باستخدامك للتطبيق بصفتك طبيبًا، فإنك تقر وتتعهد بما يلي:
-
-1) أنك طبيب مرخّص لك بمزاولة المهنة، وجميع المعلومات التي تدخلها صحيحة ومحدّثة.
-2) تتحمّل كامل المسؤولية القانونية والمهنية عن بياناتك.
-3) التطبيق لا يتحمّل مسؤولية صحة المعلومات التي يضيفها الأطباء.
-4) التطبيق مخصّص لتنظيم المواعيد فقط.
-5) انتحال صفة طبيب أو إدخال معلومات مضللة قد يعرّض الحساب للحذف والمساءلة.
-6) يحق لإدارة التطبيق طلب وثائق تثبت الصفة المهنية.
-
-بمتابعتك، فإنك توافق على جميع الشروط أعلاه.
-                      ''',
+                      t.doctorAgreementDetails,
                       style: const TextStyle(fontSize: 15, height: 1.6),
                     ),
                   ),
                 ),
               ),
             ),
+
             const SizedBox(height: 12),
+
+            // ===============================
+            // ✅ Checkbox الموافقة
+            // ===============================
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Checkbox(
                   value: accepted,
                   onChanged: (v) => setState(() => accepted = v ?? false),
                 ),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'أقرّ بأنني طبيب مرخّص وأتحمّل المسؤولية الكاملة عن صحة معلوماتي.',
+                    t.doctorAgreementConfirm,
+                    style: const TextStyle(fontSize: 14),
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 8),
+
+            // ===============================
+            // ✅ زر المتابعة
+            // ===============================
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -73,17 +79,22 @@ class _DoctorTermsScreenState extends State<DoctorTermsScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const DoctorRegisterScreen(),
+                            builder: (_) => const SignUpScreen(role: 'doctor'),
                           ),
                         );
                       }
                     : null,
-                label: const Text('متابعة إنشاء الحساب'),
+                label: Text(t.acceptAndContinue),
               ),
             ),
+
             const SizedBox(height: 6),
+
+            // ===============================
+            // ✅ تنبيه في حالة عدم الموافقة
+            // ===============================
             if (!accepted)
-              Text('يرجى الموافقة على الشروط أولًا', style: TextStyle(color: scheme.error)),
+              Text(t.mustAcceptTerms, style: TextStyle(color: scheme.error)),
           ],
         ),
       ),

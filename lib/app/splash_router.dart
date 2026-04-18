@@ -1,9 +1,11 @@
+// lib/features/auth/ui/splash_router.dart
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
-// عدّل المسارات حسب مشروعك
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
+// Screens
 import 'package:medical_booking/screens/secretary/secretary_dashboard_screen.dart';
 import 'package:medical_booking/screens/login_screen.dart';
 import 'package:medical_booking/screens/home_screen.dart';
@@ -25,30 +27,31 @@ class _SplashRouterState extends State<SplashRouter> {
   }
 
   Future<void> _routeSafely() async {
-    // نحمي من أي استثناءات غير متوقعة
     try {
       await _routeWithTimeout(const Duration(seconds: 5));
     } catch (e) {
-      debugPrint('[SplashRouter] Route error: $e');
-      _go(const LoginScreen()); // سقوط آمن للـ Login
+      debugPrint("[SplashRouter] Route error: $e");
+      _go(const LoginScreen());
     }
   }
 
   Future<void> _routeWithTimeout(Duration timeout) async {
+    final t = AppLocalizations.of(context)!;
+
     final auth = FirebaseAuth.instance;
     final user = auth.currentUser;
 
     debugPrint(
-      '[SplashRouter] start, user=${user?.uid}, anon=${user?.isAnonymous}',
+      "[SplashRouter] start, user=${user?.uid}, anon=${user?.isAnonymous}",
     );
 
-    // 1) لا يوجد مستخدم => شاشة الدخول
+    // 1) لا يوجد مستخدم
     if (user == null) {
       _go(const LoginScreen());
       return;
     }
 
-    // 2) سكرتير (Anonymous) => افحص جلسة السكريتير مع timeout
+    // 2) سكرتير (Anonymous)
     if (user.isAnonymous) {
       try {
         final doc = await FirebaseFirestore.instance
@@ -57,7 +60,7 @@ class _SplashRouterState extends State<SplashRouter> {
             .get()
             .timeout(timeout);
 
-        debugPrint('[SplashRouter] secretary_sessions exists=${doc.exists}');
+        debugPrint("[SplashRouter] secretary_sessions exists=${doc.exists}");
 
         if (!doc.exists) {
           await auth.signOut();
@@ -66,17 +69,18 @@ class _SplashRouterState extends State<SplashRouter> {
         }
 
         final data = doc.data()!;
-        final String doctorId = (data['doctorId'] ?? '').toString();
-        final ts = data['expiresAt'];
-        final DateTime? expiresAt = (ts is Timestamp) ? ts.toDate() : null;
+        final doctorId = (data['doctorId'] ?? '').toString();
 
-        final bool valid =
+        final ts = data['expiresAt'];
+        final expiresAt = ts is Timestamp ? ts.toDate() : null;
+
+        final valid =
             doctorId.isNotEmpty &&
             expiresAt != null &&
             expiresAt.isAfter(DateTime.now());
 
         debugPrint(
-          '[SplashRouter] secretary valid=$valid, doctorId=$doctorId, exp=$expiresAt',
+          "[SplashRouter] secretary valid=$valid, doctorId=$doctorId, exp=$expiresAt",
         );
 
         if (!valid) {
@@ -85,23 +89,21 @@ class _SplashRouterState extends State<SplashRouter> {
           return;
         }
 
-        // ✅ جلسة سكرتير صالحة → افتح فضاء السكريتير مباشرة
         _go(SecretaryDashboardScreen(doctorId: doctorId));
         return;
       } on TimeoutException {
-        debugPrint('[SplashRouter] secretary_sessions timeout -> login');
-        // شبكة بطيئة/مقطوعة: لا نعلّق المستخدم، نرجع للـ login
+        debugPrint("[SplashRouter] secretary_sessions timeout -> login");
         _go(const LoginScreen());
         return;
       } catch (e) {
-        debugPrint('[SplashRouter] secretary_sessions error: $e');
+        debugPrint("[SplashRouter] secretary_sessions error: $e");
         await auth.signOut();
         _go(const LoginScreen());
         return;
       }
     }
 
-    // 3) مستخدم مسجّل (طبيب/مريض) → إلى الصفحة الرئيسية
+    // 3) طبيب/مريض -> الصفحة الرئيسية
     _go(const HomeScreen());
   }
 
@@ -109,7 +111,6 @@ class _SplashRouterState extends State<SplashRouter> {
     if (!mounted || _routed) return;
     _routed = true;
 
-    // نؤجّل النفيجيشن لما بعد أول Frame لتفادي أي تعارض
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Navigator.of(

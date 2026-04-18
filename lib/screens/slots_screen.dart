@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 
 class SlotsScreen extends StatefulWidget {
-  final dynamic doctor; // يحتوي على id
-  final String date; // yyyy-MM-dd
+  final dynamic doctor;
+  final String date;
   final Map<String, dynamic>? scheduleData;
 
   const SlotsScreen({
@@ -20,8 +21,6 @@ class SlotsScreen extends StatefulWidget {
 
 class _SlotsScreenState extends State<SlotsScreen> {
   bool _loading = false;
-
-  /// NEW — مجموعة أيام العطل الاستثنائية
   Set<String> _daysOff = {};
 
   @override
@@ -30,7 +29,6 @@ class _SlotsScreenState extends State<SlotsScreen> {
     _loadDaysOff();
   }
 
-  /// ✅ تحميل العطل الاستثنائية للطبيب
   Future<void> _loadDaysOff() async {
     final snap = await FirebaseFirestore.instance
         .collection('doctor_days_off')
@@ -38,11 +36,9 @@ class _SlotsScreenState extends State<SlotsScreen> {
         .get();
 
     _daysOff = snap.docs.map((d) => (d['date'] as String).trim()).toSet();
-
     if (mounted) setState(() {});
   }
 
-  /// ✅ دالة تساعد لإيجاد بيانات اليوم المختار من schedule
   Map<String, dynamic>? _findDayData() {
     final weeks = widget.scheduleData?['weeks'];
     if (weeks == null) return null;
@@ -57,7 +53,6 @@ class _SlotsScreenState extends State<SlotsScreen> {
     return null;
   }
 
-  /// ✅ عرض الساعات من schedule
   List<String> _generateTimes() {
     final day = _findDayData();
     if (day == null) return [];
@@ -66,86 +61,98 @@ class _SlotsScreenState extends State<SlotsScreen> {
     if (slots != null && slots is List) {
       return List<String>.from(slots);
     }
-
     return [];
   }
 
-  /// ✅ تنفيذ عملية الحجز
   Future<void> _bookSlot(String time) async {
+    final t = AppLocalizations.of(context)!;
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("يجب تسجيل الدخول")));
+      ).showSnackBar(SnackBar(content: Text(t.mustLogin)));
       return;
     }
 
     final selectedDay = _findDayData();
-
-    // ✅ اليوم يجب أن يكون موجوداً في الجدول
     if (selectedDay == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("لا يمكن الحجز في هذا اليوم")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.cannotBookThisDay)));
       return;
     }
 
-    // ✅ منع الحجز في يوم عطلة استثنائية
     if (_daysOff.contains(widget.date)) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("هذا اليوم عطلة للطبيب")));
+      ).showSnackBar(SnackBar(content: Text(t.doctorDayOff)));
       return;
     }
 
-    // ✅ منع الحجز إذا اليوم غير متاح
     if (selectedDay["available"] != true) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("هذا اليوم غير متاح للحجز")));
+      ).showSnackBar(SnackBar(content: Text(t.dayNotAvailable)));
       return;
     }
 
-    // ✅ منع الحجز إذا اليوم ممتلئ
     if (selectedDay["full"] == true) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("هذا اليوم ممتلئ بالكامل")));
+      ).showSnackBar(SnackBar(content: Text(t.dayIsFull)));
       return;
     }
 
-    // ✅ منع حجز وقت غير موجود
     final allowedTimes = List<String>.from(selectedDay["slots"] ?? []);
     if (!allowedTimes.contains(time)) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("هذا التوقيت غير متاح")));
+      ).showSnackBar(SnackBar(content: Text(t.timeNotAvailable)));
       return;
     }
 
-    // ✅ منع الحجز في الماضي
     final selectedDateTime = DateTime.parse("${widget.date} $time");
     if (selectedDateTime.isBefore(DateTime.now())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("لا يمكن الحجز في وقت ماضي")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.cannotBookPastTime)));
       return;
     }
 
     setState(() => _loading = true);
 
     final fs = FirebaseFirestore.instance;
-
     final slotId = "${widget.doctor.id}_${widget.date}_$time";
     final slotRef = fs.collection('doctor_slots').doc(slotId);
     final appointmentRef = fs.collection('appointments').doc();
 
-    try {
-      await fs.runTransaction((t) async {
-        final slotSnap = await t.get(slotRef);
+    final docSnap = await FirebaseFirestore.instance
+        .collection('doctors')
+        .doc(widget.doctor.id)
+        .get();
 
-        // ✅ لا يمكن الحجز إذا كان التوقيت محجوز مسبقًا
+    final doctorData = docSnap.data() ?? {};
+    final doctorName = doctorData['name'] ?? '';
+    final doctorSpecialty = doctorData['specialtyLabel'] ?? '';
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final patientDoc = await FirebaseFirestore.instance
+        .collection('patients')
+        .doc(user.uid)
+        .get();
+
+    final patientName = (userDoc.data()?['name'] ?? '').toString();
+
+    final patientPhone = (patientDoc.data()?['phone'] ?? '').toString();
+
+    try {
+      await fs.runTransaction((t1) async {
+        final slotSnap = await t1.get(slotRef);
+
         if (slotSnap.exists) {
           final data = slotSnap.data();
           if (data != null && data['taken'] == true) {
@@ -153,13 +160,11 @@ class _SlotsScreenState extends State<SlotsScreen> {
           }
         }
 
-        // ✅ حماية إضافية ضد bypass
         if (!allowedTimes.contains(time)) {
           throw Exception("invalid_slot");
         }
 
-        // ✅ إنشاء / تحديث slot
-        t.set(slotRef, {
+        t1.set(slotRef, {
           "doctorId": widget.doctor.id,
           "date": widget.date,
           "time": time,
@@ -167,17 +172,13 @@ class _SlotsScreenState extends State<SlotsScreen> {
           "patientId": user.uid,
         }, SetOptions(merge: true));
 
-        // ✅ إنشاء appointment
-        t.set(appointmentRef, {
+        t1.set(appointmentRef, {
           "doctorId": widget.doctor.id,
           "patientId": user.uid,
-
-          "doctorName": widget.doctor.name ?? "",
-          "doctorSpecialty": widget.doctor.specialty ?? "",
-
-          "patientName": user.displayName ?? "",
-          "patientPhone": user.phoneNumber ?? "",
-
+          "doctorName": doctorName,
+          "doctorSpecialty": doctorSpecialty,
+          "patientName": patientName,
+          "patientPhone": patientPhone,
           "dateTime": Timestamp.fromDate(selectedDateTime),
           "slotId": slotId,
           "status": "pending",
@@ -187,16 +188,16 @@ class _SlotsScreenState extends State<SlotsScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("تم إرسال طلب الحجز بنجاح ✔")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.bookingSent)));
     } catch (e) {
-      String message = "حدث خطأ غير متوقع";
+      String message = t.unexpectedError;
 
       if (e.toString().contains("taken")) {
-        message = "هذا الموعد محجوز بالفعل ❌";
+        message = t.slotAlreadyTaken;
       } else if (e.toString().contains("invalid_slot")) {
-        message = "لا يمكن حجز وقت غير موجود في جدول الطبيب";
+        message = t.invalidSlot;
       }
 
       ScaffoldMessenger.of(
@@ -209,10 +210,11 @@ class _SlotsScreenState extends State<SlotsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final times = _generateTimes();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("اختيار موعد")),
+      appBar: AppBar(title: Text(t.chooseAppointment)),
       body: Stack(
         children: [
           GridView.builder(
@@ -226,14 +228,12 @@ class _SlotsScreenState extends State<SlotsScreen> {
             itemCount: times.length,
             itemBuilder: (context, index) {
               final time = times[index];
-
               return ElevatedButton(
                 onPressed: _loading ? null : () => _bookSlot(time),
                 child: Text(time),
               );
             },
           ),
-
           if (_loading)
             Container(
               color: Colors.black.withOpacity(0.2),

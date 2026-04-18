@@ -1,7 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../services/doctor_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
+import 'package:medical_booking/services/doctor_service.dart';
 
 class MyAppointmentsScreen extends StatefulWidget {
   const MyAppointmentsScreen({super.key});
@@ -46,7 +47,6 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           for (final doc in snap.docs) {
             final data = doc.data();
 
-            // ✅ نعتمد فقط على dateTime
             DateTime? dt;
             if (data['dateTime'] != null && data['dateTime'] is Timestamp) {
               dt = (data['dateTime'] as Timestamp).toDate();
@@ -54,11 +54,11 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
             results.add({
               'id': doc.id,
-              'doctorId': (data['doctorId'] ?? '').toString(),
-              'doctorName': (data['doctorName'] ?? '').toString(),
-              'doctorSpecialty': (data['doctorSpecialty'] ?? '').toString(),
+              'doctorId': data['doctorId'] ?? '',
+              'doctorName': data['doctorName'] ?? '',
+              'doctorSpecialty': data['doctorSpecialty'] ?? '',
               'dateTime': dt,
-              'status': (data['status'] ?? 'pending').toString(),
+              'status': data['status'] ?? 'pending',
             });
           }
 
@@ -68,16 +68,18 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (patientId == null) {
-      return const Scaffold(body: Center(child: Text('لم يتم تسجيل الدخول')));
+      return Scaffold(body: Center(child: Text(t.notLoggedIn)));
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('مواعيدي')),
+      appBar: AppBar(title: Text(t.myAppointments)),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _myAppointments(),
         builder: (context, snapshot) {
@@ -86,64 +88,55 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
           }
 
           if (snapshot.hasError) {
-            return const Center(
-              child: Text('تعذّر تحميل المواعيد. يرجى المحاولة لاحقًا.'),
-            );
+            return Center(child: Text(t.failedToLoadAppointments));
           }
 
           final items = snapshot.data ?? [];
 
           if (items.isEmpty) {
-            return const Center(child: Text('لا توجد مواعيد بعد.'));
+            return Center(child: Text(t.noAppointmentsYet));
           }
 
           return ListView.separated(
             padding: const EdgeInsets.all(12),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final a = items[i];
 
-              final String doctorName = a['doctorName'] ?? '';
-              final String doctorSpec = a['doctorSpecialty'] ?? '';
-              final String fallbackTitle = 'طبيب: ${a['doctorId']}';
-              final String title = (doctorName.isNotEmpty
+              final String doctorName = a['doctorName'];
+              final String specialty = a['doctorSpecialty'];
+
+              final title = doctorName.isNotEmpty
                   ? doctorName
-                  : fallbackTitle);
+                  : "${t.doctor}: ${a['doctorId']}";
 
-              // ✅ استخراج التاريخ والوقت من dateTime فقط
-              final DateTime? dt = a['dateTime'] as DateTime?;
-
+              final DateTime? dt = a['dateTime'];
               final String dateStr = dt == null
                   ? '—'
-                  : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+                  : "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
 
               final String timeStr = dt == null
                   ? '—'
-                  : '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                  : "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
 
-              final String status = a['status'] ?? 'pending';
-
+              final String status = a['status'];
               Color statusColor;
-              String statusLabelAr;
+              String statusLabel;
 
               switch (status) {
                 case 'confirmed':
                   statusColor = Colors.green;
-                  statusLabelAr = 'مؤكّد';
+                  statusLabel = t.statusConfirmed;
                   break;
                 case 'canceled':
                   statusColor = Colors.red;
-                  statusLabelAr = 'ملغى';
+                  statusLabel = t.statusCanceled;
                   break;
                 default:
                   statusColor = Colors.orange;
-                  statusLabelAr = 'قيد الانتظار';
+                  statusLabel = t.statusPending;
               }
-
-              final String subtitle = doctorSpec.isNotEmpty
-                  ? '$dateStr  •  $timeStr الاختصاص: $doctorSpec'
-                  : '$dateStr  •  $timeStr';
 
               return Card(
                 elevation: 1,
@@ -156,10 +149,10 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Icon(Icons.event_note),
                           const SizedBox(width: 8),
+
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,93 +164,39 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                                     fontSize: 16,
                                   ),
                                 ),
-                                if (doctorSpec.isNotEmpty)
-                                  Text('الاختصاص: $doctorSpec'),
+
+                                if (specialty.isNotEmpty)
+                                  Text("${t.specialty}: $specialty"),
                               ],
                             ),
                           ),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: statusColor.withOpacity(0.5),
-                                  ),
-                                ),
-                                child: Text(
-                                  statusLabelAr,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: statusColor,
-                                  ),
-                                ),
+
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: statusColor.withOpacity(0.5),
                               ),
-                              PopupMenuButton<String>(
-                                onSelected: (v) async {
-                                  if (v == 'cancel' && a['id'] != null) {
-                                    final appointmentRef = FirebaseFirestore
-                                        .instance
-                                        .collection('appointments')
-                                        .doc(a['id']);
-
-                                    await FirebaseFirestore.instance
-                                        .runTransaction((t) async {
-                                          final apptSnap = await t.get(
-                                            appointmentRef,
-                                          );
-                                          if (!apptSnap.exists) return;
-
-                                          final data = apptSnap.data()!;
-                                          final slotId = data['slotId'];
-
-                                          t.update(appointmentRef, {
-                                            'status': 'canceled',
-                                          });
-
-                                          if (slotId != null) {
-                                            final slotRef = FirebaseFirestore
-                                                .instance
-                                                .collection('doctor_slots')
-                                                .doc(slotId);
-
-                                            t.update(slotRef, {'taken': false});
-                                          }
-                                        });
-
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'تم إلغاء الموعد وأصبح التوقيت متاحًا',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  }
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                    value: 'cancel',
-                                    child: Text('إلغاء الموعد'),
-                                  ),
-                                ],
-                                icon: const Icon(Icons.more_vert),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor,
                               ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 10),
+
                       Row(
                         children: [
                           const Icon(Icons.calendar_today, size: 16),
@@ -268,6 +207,55 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                           const SizedBox(width: 6),
                           Text(timeStr),
                         ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      PopupMenuButton<String>(
+                        onSelected: (v) async {
+                          try {
+                            if (v == 'delete' && a['id'] != null) {
+                              await FirebaseFirestore.instance
+                                  .collection('appointments')
+                                  .doc(a['id'])
+                                  .delete();
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(t.appointmentDeleted)),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(t.operationFailed)),
+                              );
+                            }
+                          }
+                        },
+
+                        itemBuilder: (_) => [
+                          // ✅ يظهر فقط إذا كان الموعد ملغى
+                          if (status == 'canceled')
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    t.deleteAppointment,
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+
+                        icon: const Icon(Icons.more_vert),
                       ),
                     ],
                   ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 
 // شاشات السكريتير/الطبيب
 import 'package:medical_booking/features/secretary/ui/appointments_today_screen.dart';
@@ -20,32 +21,26 @@ class SecretaryDashboardScreen extends StatefulWidget {
 }
 
 class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
-  int _current = 1; // نبدأ على "مواعيد اليوم"
+  int _current = 1; // يبدأ على "مواعيد اليوم"
   late final List<_Tab> _tabs;
 
   @override
   void initState() {
     super.initState();
 
-    // ملاحظة مهمة:
-    // سنمرّر hideInnerHeader:true للشاشات التي تحتوي على Header داخلي بعنوان + سهم
-    // (DoctorScheduleScreen, DaysOffScreen, وقد تكون DoctorDashboardScreen / DoctorCalendarScreen
-    //  إن كان فيهما ترويسة داخلية).
     _tabs = [
       _Tab(
-        label: 'لوحة الطبيب',
+        labelKey: "doctorDashboard",
         icon: Icons.dashboard_customize_rounded,
         builder: () => DoctorDashboardScreen(
           doctorId: widget.doctorId,
           asSecretary: true,
-          // لو يوجد هيدر داخلي في هذه الشاشة سنُخفيه بهذا الباراميتر
           hideInnerHeader: true,
         ),
       ),
       _Tab(
-        label: 'مواعيد اليوم',
+        labelKey: "appointmentsToday",
         icon: Icons.today_outlined,
-        // AppointmentsTodayScreen غالبًا بدون هيدر داخلي، نتركها كما هي
         builder: () => AppointmentsTodayScreen(
           doctorId: widget.doctorId,
           asSecretary: true,
@@ -53,31 +48,30 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
         ),
       ),
       _Tab(
-        label: 'الرزنامة',
+        labelKey: "calendar",
         icon: Icons.calendar_month_rounded,
         builder: () => DoctorCalendarScreen(
           doctorId: widget.doctorId,
           asSecretary: true,
-          hideInnerHeader: true, // إن كان فيها ترويسة داخلية سيتم إخفاؤها
+          hideInnerHeader: true,
         ),
       ),
       _Tab(
-        label: 'البرنامج',
+        labelKey: "scheduleSettings",
         icon: Icons.schedule_rounded,
         builder: () => DoctorScheduleScreen(
           doctorId: widget.doctorId,
           asSecretary: true,
-          hideInnerHeader: true, // مهم لإخفاء العنوان والسهم
+          hideInnerHeader: true,
         ),
       ),
-
       _Tab(
-        label: 'أيام العطل',
+        labelKey: "daysOff",
         icon: Icons.beach_access_rounded,
         builder: () => DaysOffScreen(
           doctorId: widget.doctorId,
           asSecretary: true,
-          hideInnerHeader: true, // مهم لإخفاء العنوان والسهم
+          hideInnerHeader: true,
         ),
       ),
     ];
@@ -93,6 +87,8 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: WillPopScope(
@@ -100,41 +96,34 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
         child: Scaffold(
           backgroundColor: const Color(0xFFF6F8FA),
 
-          // AppBar الرئيسي لفضاء السكريتير
           appBar: AppBar(
             elevation: 0,
             backgroundColor: kBrandColor,
             centerTitle: true,
-            title: const Text(
-              'فضاء السكريتير',
-              style: TextStyle(
+            title: Text(
+              t.secretarySpace,
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            automaticallyImplyLeading: false, // لا نعرض سهم رجوع هنا
+            automaticallyImplyLeading: false,
             actions: [
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.white),
+                tooltip: t.logout,
                 onPressed: () async {
-                  final auth = FirebaseAuth.instance;
-
-                  // في الحالتين سنعمل signOut
-                  await auth.signOut();
-
+                  await FirebaseAuth.instance.signOut();
                   if (context.mounted) {
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      '/login', // غيّر المسار إذا كان مختلفًا عندك
-                      (_) => false,
-                    );
+                    Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/login', (_) => false);
                   }
                 },
-                tooltip: 'تسجيل الخروج',
               ),
             ],
           ),
 
-          // محتوى التبويبات
           body: IndexedStack(
             index: _current,
             children: _tabs.map((t) => _KeepAlive(child: t.builder())).toList(),
@@ -150,9 +139,9 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
             showUnselectedLabels: true,
             items: _tabs
                 .map(
-                  (t) => BottomNavigationBarItem(
-                    icon: Icon(t.icon),
-                    label: t.label,
+                  (tTab) => BottomNavigationBarItem(
+                    icon: Icon(tTab.icon),
+                    label: t.getString(tTab.labelKey),
                   ),
                 )
                 .toList(),
@@ -163,13 +152,16 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
   }
 }
 
+/// كلاس خاص بالمعلومات لكل Tab
 class _Tab {
-  final String label;
+  final String labelKey; // مفتاح الترجمة
   final IconData icon;
   final Widget Function() builder;
-  _Tab({required this.label, required this.icon, required this.builder});
+
+  _Tab({required this.labelKey, required this.icon, required this.builder});
 }
 
+/// جعل كل Tab يحتفظ بحالته
 class _KeepAlive extends StatefulWidget {
   final Widget child;
   const _KeepAlive({required this.child});
@@ -187,5 +179,25 @@ class _KeepAliveState extends State<_KeepAlive>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+/// ✅ إضافة getString كمساعد لجلب النصوص من AppLocalizations
+extension LocalizationHelper on AppLocalizations {
+  String getString(String key) {
+    switch (key) {
+      case "doctorDashboard":
+        return doctorDashboard;
+      case "appointmentsToday":
+        return appointmentsToday;
+      case "calendar":
+        return calendar;
+      case "scheduleSettings":
+        return scheduleSettings;
+      case "daysOff":
+        return daysOff;
+      default:
+        return key;
+    }
   }
 }

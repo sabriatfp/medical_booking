@@ -1,22 +1,25 @@
+// lib/core/notifications/notification_router.dart
+
 import 'package:flutter/material.dart';
 
-// استورد الشاشات التي ستنتقل إليها من الإشعار:
+// Screens to open from notifications
 import '../screens/doctor/doctor_dashboard_screen.dart';
 import '../screens/my_appointments_screen.dart';
 import '../screens/doctor/doctor_calendar_screen.dart';
 import '../screens/doctor/doctor_finance_screen.dart';
 
-/// Router مخصص لسيناريوهات الضغط على الإشعار.
-/// data هي الحقول القادمة من FCM (message.data).
+/// Notification Router – decides which screen to navigate to
+/// based on the routeName received from an FCM notification.
+///
+/// Example routeName values:
+/// - 'doctor_dashboard'
+/// - 'my_appointments'
+/// - 'doctor_calendar'
+/// - 'doctor_finance'
 class NotificationRouter {
-  const NotificationRouter._();
+  const NotificationRouter._(); // prevent instantiation
 
-  /// يبني Route حسب routeName القادم من الإشعار.
-  /// أمثلة routeName:
-  /// - 'doctor_dashboard'
-  /// - 'my_appointments'
-  /// - 'doctor_calendar'
-  /// - 'doctor_finance'
+  /// Builds and returns the appropriate Route based on routeName.
   static Route<dynamic>? buildRoute(
     String routeName,
     Map<String, dynamic> data,
@@ -47,7 +50,7 @@ class NotificationRouter {
         );
 
       default:
-        // route غير معروف → لا نفتح شيء (أو ارجع null)
+        // Unknown route → return null (do nothing)
         return null;
     }
   }

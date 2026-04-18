@@ -2,8 +2,133 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 class DoctorService {
+  static Future<void> normalizeRollingWeeks({
+    required String doctorId,
+    required Map<String, Map<String, dynamic>> weeklyTemplate,
+    required Set<String> exceptionalDaysOff,
+    required int slotDuration,
+  }) async {
+    if (slotDuration <= 0) return; // ✅ أضف هذا
+
+    final docRef = FirebaseFirestore.instance
+        .collection('doctors')
+        .doc(doctorId);
+
+    final snap = await docRef.get();
+    if (!snap.exists) return;
+
+    final data = snap.data()!;
+    List weeks = List.from(data['weeks'] ?? []);
+
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    // 1️⃣ حذف الأسابيع المنتهية
+    weeks.removeWhere((w) {
+      final start = DateTime.parse(w['startDate']);
+      final end = start.add(const Duration(days: 6));
+      return end.isBefore(todayDate.subtract(const Duration(days: 1)));
+    });
+
+    // 2️⃣ توليد الأيام (نفس منطقك)
+    List<Map<String, dynamic>> generateWeekDays(DateTime startDate) {
+      final List<Map<String, dynamic>> output = [];
+
+      for (int i = 0; i < 7; i++) {
+        final d = startDate.add(Duration(days: i));
+        final dateStr = DateFormat("yyyy-MM-dd").format(d);
+        final dayName = [
+          "الإثنين",
+          "الثلاثاء",
+          "الأربعاء",
+          "الخميس",
+          "الجمعة",
+          "السبت",
+          "الأحد",
+        ][d.weekday - 1];
+
+        final tmpl = weeklyTemplate[dayName];
+
+        if (tmpl == null) {
+          output.add({
+            "date": dateStr,
+            "available": false,
+            "start": null,
+            "end": null,
+            "slots": [],
+            "full": true,
+          });
+          continue;
+        }
+
+        final isDayOff = exceptionalDaysOff.contains(dateStr);
+        final available = tmpl["available"] == true && !isDayOff;
+
+        List<String> slots = [];
+        if (available) {
+          int startMin =
+              int.parse(tmpl["start"].split(":")[0]) * 60 +
+              int.parse(tmpl["start"].split(":")[1]);
+          int endMin =
+              int.parse(tmpl["end"].split(":")[0]) * 60 +
+              int.parse(tmpl["end"].split(":")[1]);
+
+          while (startMin + slotDuration <= endMin) {
+            final h = (startMin ~/ 60).toString().padLeft(2, '0');
+            final m = (startMin % 60).toString().padLeft(2, '0');
+            slots.add("$h:$m");
+            startMin += slotDuration;
+          }
+        }
+
+        output.add({
+          "date": dateStr,
+          "available": available,
+          "start": tmpl["start"],
+          "end": tmpl["end"],
+          "slots": slots,
+          "full": false,
+        });
+      }
+
+      return output;
+    }
+
+    // 3️⃣ إضافة أسابيع جديدة حتى يصبح العدد 3
+    // 3️⃣ إضافة أسابيع جديدة حتى يصبح العدد 3
+    while (weeks.length < 3) {
+      DateTime newStart;
+
+      if (weeks.isEmpty) {
+        // ✅ أبقِ الأسبوع الحالي (تحسين UX)
+        newStart = startOfCurrentWeek(todayDate);
+      } else {
+        final lastStart = DateTime.parse(weeks.last['startDate']);
+        newStart = lastStart.add(const Duration(days: 7));
+      }
+
+      weeks.add({
+        "startDate": newStart.toIso8601String(),
+        "days": generateWeekDays(newStart),
+      });
+    }
+
+    // 4️⃣ حفظ فقط إذا حصل تغيير
+    await docRef.set({"weeks": weeks}, SetOptions(merge: true));
+  }
+
+  static DateTime startOfCurrentWeek(DateTime today) {
+    // الاثنين = 1
+    return DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(Duration(days: today.weekday - DateTime.monday));
+  }
+
   DoctorService();
 
   final FirebaseFirestore _fs = FirebaseFirestore.instance;

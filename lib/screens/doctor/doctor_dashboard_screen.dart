@@ -1,27 +1,23 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import '../../services/doctor_service.dart';
+import 'package:intl/intl.dart';
 
 enum DocApptFilter { all, pending, confirmed, canceled }
 
 class DoctorDashboardScreen extends StatefulWidget {
-  /// في وضع الطبيب: اتركها null وسيتم استنتاج doctorId من الحساب
-  /// في وضع السكرتير: مرّر doctorId صراحة + asSecretary: true
-  final String? doctorId;
+  final String doctorId;
   final bool asSecretary;
-
-  /// إخفاء الهيدر الداخلي عندما تكون الشاشة مضمّنة في فضاء السكريتير
   final bool hideInnerHeader;
 
   const DoctorDashboardScreen({
     super.key,
-    this.doctorId,
+    required this.doctorId,
     this.asSecretary = false,
-    this.hideInnerHeader = false, // الافتراضي: لا نخفي
+    this.hideInnerHeader = false,
   });
 
   @override
@@ -29,49 +25,24 @@ class DoctorDashboardScreen extends StatefulWidget {
 }
 
 class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
-  final DoctorService _doctorService = DoctorService();
   DocApptFilter _filter = DocApptFilter.all;
-
-  String? _resolvedDoctorId; // الناتج النهائي الذي سنستخدمه
   bool _loading = true;
-  String? _error;
 
-  // تشخيص انتظار الـ Stream
   Timer? _waitTimer;
   bool _streamWaitingTooLong = false;
 
   @override
   void initState() {
     super.initState();
-    _resolveDoctorId();
+
+    // ✅ doctorId جاهز 100% — لا نحتاج أي getDoctorId()
+    _loading = false;
   }
 
   @override
   void dispose() {
     _waitTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _resolveDoctorId() async {
-    try {
-      if (widget.doctorId != null && widget.doctorId!.isNotEmpty) {
-        _resolvedDoctorId = widget.doctorId;
-      } else {
-        _resolvedDoctorId = await _doctorService.getDoctorId();
-      }
-      if (_resolvedDoctorId == null || _resolvedDoctorId!.isEmpty) {
-        _error = 'لم يتم ربط الحساب بطبيب';
-      } else {
-        debugPrint(
-          '👨‍⚕️ DOCTOR DASH → doctorId=$_resolvedDoctorId, asSecretary=${widget.asSecretary}',
-        );
-      }
-    } catch (e, st) {
-      debugPrint('❌ ERROR resolving doctorId → $e\n$st');
-      _error = 'خطأ أثناء تحديد الطبيب';
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
   }
 
   String? _statusFromFilter() {
@@ -88,131 +59,75 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     }
   }
 
+  // ====== الاتصال ======
   Future<void> _callNumber(String phone) async {
-    final cleaned = phone.trim();
-    if (cleaned.isEmpty) {
-      if (!mounted) return;
+    final t = AppLocalizations.of(context)!;
+
+    if (phone.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('رقم الهاتف غير متوفر')));
+      ).showSnackBar(SnackBar(content: Text(t.phoneUnavailable)));
       return;
     }
-    final uri = Uri(scheme: 'tel', path: cleaned);
+
+    final uri = Uri(scheme: 'tel', path: phone.trim());
+
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('تعذر فتح تطبيق الاتصال')));
+      ).showSnackBar(SnackBar(content: Text(t.callFailed)));
     }
   }
 
-  /// اختبار مباشر للاستعلام خارج الـ Stream لمعرفة:
-  /// - هل القواعد تمنع القراءة (permission-denied)؟
-  /// - هل لا توجد بيانات؟
-  Future<void> _testQuery(String doctorId, String? status) async {
-    try {
-      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-          .collection('appointments')
-          .where('doctorId', isEqualTo: doctorId);
-
-      if (status != null) {
-        q = q.where('status', isEqualTo: status);
-      }
-
-      // ملاحظة: إذا كان اسم الحقل في بياناتك مختلف (مثل scheduledAt)، عدّل السطر أدناه:
-      q = q.orderBy('dateTime'); // <-- عدّل إلى 'scheduledAt' إذا لزم
-
-      final snap = await q.get();
-      debugPrint(
-        '🔎 TEST GET → ${snap.docs.length} docs (doctorId=$doctorId, status=$status)',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('قراءة مباشرة: ${snap.docs.length} عنصر')),
-      );
-    } on FirebaseException catch (e) {
-      debugPrint('❌ TEST GET FIREBASE ERROR → ${e.code} ${e.message}');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'صلاحيات غير كافية لقراءة المواعيد (permission-denied).'
-                : 'خطأ Firebase: ${e.code}',
-          ),
-        ),
-      );
-    } catch (e) {
-      debugPrint('❌ TEST GET ERROR → $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('خطأ غير متوقع أثناء الاختبار')),
-      );
-    }
-  }
-
+  // ========== واجهة البناء ==========
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_error != null) {
-      return Scaffold(
-        appBar: widget.hideInnerHeader ? null : AppBar(title: _appBarTitle()),
-        body: Center(child: Text(_error!)),
-      );
-    }
 
-    final doctorId = _resolvedDoctorId!;
+    // ✅ doctorId جاهز لأن الشاشة لا تُفتح إلا بوجوده
+    final doctorId = widget.doctorId;
     final currentStatus = _statusFromFilter();
 
     return Scaffold(
-      appBar: widget.hideInnerHeader ? null : AppBar(title: _appBarTitle()),
+      appBar: widget.hideInnerHeader
+          ? null
+          : AppBar(title: Text(t.doctorDashboard)),
+
       body: Column(
         children: [
           _filterChips(),
 
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _doctorService.appointmentsStream(
+              stream: DoctorService().appointmentsStream(
                 doctorId,
                 currentStatus,
               ),
               builder: (context, snapshot) {
-                // إدارة مؤقت الانتظار الطويل
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  _startWaitTimer(doctorId, currentStatus);
+                  _startWaitTimer();
                 } else {
                   _cancelWaitTimer();
                 }
 
                 if (snapshot.hasError) {
-                  debugPrint('❌ APPTS STREAM ERROR → ${snapshot.error}');
-                  return _errorView(
-                    message: 'خطأ في تحميل المواعيد',
-                    onTryDirectRead: () => _testQuery(doctorId, currentStatus),
-                  );
+                  return _centerMessage(t.errorLoadingAppointments);
                 }
 
                 if (!snapshot.hasData) {
-                  return _waitingView(
-                    isTakingLong: _streamWaitingTooLong,
-                    onTryDirectRead: () => _testQuery(doctorId, currentStatus),
-                  );
+                  return _waitingView(t);
                 }
 
                 final docs = snapshot.data!.docs;
-                debugPrint(
-                  '📦 APPTS SNAP(${currentStatus ?? "all"}) → ${docs.length} docs',
-                );
 
                 if (docs.isEmpty) {
-                  return _emptyView(
-                    message: 'لا توجد مواعيد',
-                    onTryDirectRead: () => _testQuery(doctorId, currentStatus),
-                  );
+                  return _centerMessage(t.noAppointments);
                 }
 
                 return ListView.builder(
@@ -221,12 +136,9 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   itemBuilder: (context, i) {
                     final d = docs[i].data();
 
-                    // التاريخ/الوقت
                     DateTime? dt;
-                    final dtAny =
-                        d['dateTime']; // <-- عدّل لاسم الحقل إذا لزم (scheduledAt)
-                    if (dtAny is Timestamp) {
-                      dt = dtAny.toDate();
+                    if (d['dateTime'] is Timestamp) {
+                      dt = (d['dateTime'] as Timestamp).toDate();
                     }
 
                     final patientName = (d['patientName'] ?? '').toString();
@@ -239,48 +151,39 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                         ? Colors.red
                         : Colors.orange;
 
-                    // ✅ قرارات الواجهة: ماذا نعرض من خيارات حسب الحالة الحالية؟
-                    final bool canConfirm =
+                    final isPending =
                         status == 'pending' || status == 'requested';
-                    final bool canCancel =
-                        status == 'pending' ||
-                        status == 'requested' ||
-                        status == 'confirmed';
+                    final isCancelable = status != 'canceled';
 
                     return Card(
                       child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
                         leading: const Icon(Icons.calendar_month),
+
                         title: Row(
                           children: [
                             Expanded(
                               child: Text(
-                                patientName.isEmpty ? "مريض" : patientName,
+                                patientName.isEmpty ? t.patient : patientName,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(20),
+                                color: statusColor.withOpacity(.15),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 status == 'confirmed'
-                                    ? 'مؤكّد'
+                                    ? t.statusConfirmed
                                     : status == 'canceled'
-                                    ? 'ملغى'
-                                    : 'قيد الانتظار',
+                                    ? t.statusCanceled
+                                    : t.statusPending,
                                 style: TextStyle(
                                   color: statusColor,
                                   fontSize: 11,
@@ -290,103 +193,93 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                             ),
                           ],
                         ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            (dt != null)
-                                ? "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}  "
-                                      "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}\n"
-                                      "الهاتف: ${patientPhone.isEmpty ? 'غير متوفر' : patientPhone}"
-                                : "الوقت: غير محدّد\n"
-                                      "الهاتف: ${patientPhone.isEmpty ? 'غير متوفر' : patientPhone}",
-                          ),
+
+                        subtitle: Text(
+                          dt != null
+                              ? "${DateFormat('yyyy-MM-dd HH:mm').format(dt)}\n${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}"
+                              : "${t.time}: ${t.notAvailable}\n${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}",
                         ),
+
                         isThreeLine: true,
 
-                        // قائمة الإجراءات
                         trailing: PopupMenuButton<String>(
                           onSelected: (v) async {
                             try {
                               if (v == 'confirm') {
-                                await _doctorService.updateAppointmentStatus(
+                                await DoctorService().updateAppointmentStatus(
                                   docs[i].id,
                                   'confirmed',
                                 );
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('تم تأكيد الموعد'),
-                                    ),
-                                  );
-                                }
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(t.appointmentConfirmed),
+                                  ),
+                                );
                               } else if (v == 'cancel') {
-                                await _doctorService.updateAppointmentStatus(
+                                await DoctorService().updateAppointmentStatus(
                                   docs[i].id,
                                   'canceled',
                                 );
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('تم إلغاء الموعد'),
-                                    ),
-                                  );
-                                }
-                              }
-                            } on FirebaseException catch (e) {
-                              debugPrint(
-                                '❌ APPT UPDATE ERROR: ${e.code} ${e.message}',
-                              );
-                              if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text(
-                                      e.code == 'permission-denied'
-                                          ? 'صلاحيات غير كافية. تأكّد من قواعد Firestore وجلسة السكريتير.'
-                                          : 'تعذّر تنفيذ العملية: ${e.code}',
-                                    ),
+                                    content: Text(t.appointmentCanceled),
                                   ),
+                                );
+                              }
+                              // ✅ حذف الموعد (ملغى فقط)
+                              else if (v == 'delete') {
+                                await FirebaseFirestore.instance
+                                    .collection('appointments')
+                                    .doc(docs[i].id)
+                                    .delete();
+
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(t.appointmentDeleted)),
                                 );
                               }
                             } catch (e) {
-                              debugPrint('❌ APPT UPDATE ERROR: $e');
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('خطأ غير متوقع.'),
-                                  ),
-                                );
-                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(t.operationFailed)),
+                              );
                             }
                           },
+
                           itemBuilder: (_) {
-                            final items = <PopupMenuEntry<String>>[];
-                            if (canConfirm) {
-                              items.add(
-                                const PopupMenuItem(
+                            return [
+                              if (isPending)
+                                PopupMenuItem(
                                   value: 'confirm',
-                                  child: Text('تأكيد الموعد'),
+                                  child: Text(t.confirmAppointment),
                                 ),
-                              );
-                            }
-                            if (canCancel) {
-                              items.add(
-                                const PopupMenuItem(
+
+                              if (isCancelable)
+                                PopupMenuItem(
                                   value: 'cancel',
-                                  child: Text('إلغاء الموعد'),
+                                  child: Text(t.cancelAppointment),
                                 ),
-                              );
-                            }
-                            if (items.isEmpty) {
-                              items.add(
-                                const PopupMenuItem(
-                                  enabled: false,
-                                  child: Text('لا توجد إجراءات متاحة'),
+
+                              // ✅ يظهر فقط إذا كان ملغى
+                              if (status == 'canceled')
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        t.deleteAppointment,
+                                        style: const TextStyle(
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              );
-                            }
-                            return items;
+                            ];
                           },
-                          icon: const Icon(Icons.more_vert),
                         ),
 
                         onTap: () => _callNumber(patientPhone),
@@ -402,12 +295,13 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
-  // ---------- واجهات مساعدة (انتظار/خطأ/لا بيانات) ----------
+  // ========== واجهات مساعدة ==========
 
-  Widget _waitingView({
-    required bool isTakingLong,
-    required VoidCallback onTryDirectRead,
-  }) {
+  Widget _centerMessage(String message) {
+    return Center(child: Text(message));
+  }
+
+  Widget _waitingView(AppLocalizations t) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -415,74 +309,27 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           const CircularProgressIndicator(),
           const SizedBox(height: 12),
           Text(
-            isTakingLong
-                ? 'تأخر التحميل. تحقق من الاتصال أو الصلاحيات.'
-                : 'جارٍ تحميل المواعيد...',
-          ),
-          if (isTakingLong) ...[
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: onTryDirectRead,
-              child: const Text('تجربة قراءة مباشرة'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _errorView({
-    required String message,
-    required VoidCallback onTryDirectRead,
-  }) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: onTryDirectRead,
-            child: const Text('تجربة قراءة مباشرة'),
+            _streamWaitingTooLong ? t.loadingTakingLong : t.loadingAppointments,
           ),
         ],
       ),
     );
   }
 
-  Widget _emptyView({
-    required String message,
-    required VoidCallback onTryDirectRead,
-  }) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: onTryDirectRead,
-            child: const Text('تحديث / تجربة قراءة مباشرة'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------- AppBar + فلاتر ----------
-
-  Text _appBarTitle() {
-    return Text(widget.asSecretary ? 'لوحة الطبيب' : 'لوحة الطبيب');
-  }
+  // ========== الفلاتر ==========
 
   Widget _filterChips() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final t = AppLocalizations.of(context)!;
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 4,
       children: [
-        _chip('الكل', DocApptFilter.all),
-        _chip('قيد الانتظار', DocApptFilter.pending),
-        _chip('مؤكّد', DocApptFilter.confirmed),
-        _chip('ملغى', DocApptFilter.canceled),
+        _chip(t.all, DocApptFilter.all),
+        _chip(t.statusPending, DocApptFilter.pending),
+        _chip(t.statusConfirmed, DocApptFilter.confirmed),
+        _chip(t.statusCanceled, DocApptFilter.canceled),
       ],
     );
   }
@@ -498,15 +345,15 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
-  // ---------- إدارة مؤقت الانتظار الطويل ----------
+  // ========== مؤقت الانتظار ==========
+  void _startWaitTimer() {
+    if (_waitTimer != null) return;
 
-  void _startWaitTimer(String doctorId, String? status) {
-    if (_waitTimer != null) return; // مؤقت قائم بالفعل
     _streamWaitingTooLong = false;
+
     _waitTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted) return;
       setState(() => _streamWaitingTooLong = true);
-      debugPrint('⏳ STREAM WAIT TOO LONG (doctorId=$doctorId, status=$status)');
     });
   }
 
@@ -514,9 +361,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     if (_waitTimer != null) {
       _waitTimer!.cancel();
       _waitTimer = null;
-    }
-    if (_streamWaitingTooLong) {
-      setState(() => _streamWaitingTooLong = false);
     }
   }
 }

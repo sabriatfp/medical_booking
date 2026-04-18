@@ -1,73 +1,87 @@
 class Doctor {
   final String id;
+
   final String name;
-  final String specialty;
-  final String? description;
-  final double rating;
-  final String address;
+
+  final String specialtyId;
+  final String? specialtyLabelAr;
+  final String? specialtyLabelEn;
+  final String? specialtyLabelFr;
+
+  final String governorateId;
+  final String governorateLabel;
+
   final String phone;
-  final double price;
-  final bool isPriceVisible;
+  final String address;
+
+  final double rating;
+  final double? price;
+
   final bool isAvailable;
+  final bool isPriceVisible;
+  final bool subscriptionActive;
   final String? photoUrl;
-  final List<String> slots;
+
   Doctor({
     required this.id,
     required this.name,
-    required this.specialty,
-    this.description,
-    required this.rating,
-    required this.address,
+
+    required this.specialtyId,
+    this.specialtyLabelAr,
+    this.specialtyLabelEn,
+    this.specialtyLabelFr,
+    required this.governorateId,
+    required this.governorateLabel,
+
     required this.phone,
-    required this.price,
-    required this.isPriceVisible,
+    required this.address,
+    required this.subscriptionActive,
+    required this.rating,
+    this.price,
+
     required this.isAvailable,
+    required this.isPriceVisible,
+
     this.photoUrl,
-    required this.slots,
   });
 
   factory Doctor.fromMap(String id, Map<String, dynamic> data) {
-    // تحويل آمن للـ rating (قد تكون int أو double أو null)
-    final ratingRaw = data['rating'];
-    final double rating = switch (ratingRaw) {
-      int v => v.toDouble(),
-      double v => v,
-      String v => double.tryParse(v) ?? 0.0,
-      _ => 0.0,
-    };
+    double asDouble(dynamic v) {
+      if (v is int) return v.toDouble();
+      if (v is double) return v;
+      if (v is String) return double.tryParse(v) ?? 0;
+      return 0;
+    }
 
-    // تحويل آمن للـ price (num)
-    final priceRaw = data['price'];
-    final num price = switch (priceRaw) {
-      int v => v,
-      double v => v,
-      String v => num.tryParse(v) ?? 0,
-      _ => 0,
-    };
-
-    // تحويل آمن للحقول النصية (حتى لو دخلت كأرقام)
     String asString(dynamic v) => v?.toString() ?? '';
 
-    // تحويل آمن للـ boolean
-    final isAvailableRaw = data['isAvailable'];
-    final bool isAvailable = switch (isAvailableRaw) {
-      bool v => v,
-      int v => v != 0,
-      String v => v.toLowerCase() == 'true',
-      _ => false,
-    };
+    final legacySpecialtyLabel = data['specialtyLabel']?.toString() ?? '';
 
     return Doctor(
       id: id,
       name: asString(data['name']),
-      specialty: asString(['specialty']),
-      rating: rating,
-      address: asString(data['address']),
+
+      specialtyId: asString(data['specialtyId']),
+      specialtyLabelAr:
+          data['specialtyLabel_ar']?.toString() ?? legacySpecialtyLabel,
+      specialtyLabelEn:
+          data['specialtyLabel_en']?.toString() ?? legacySpecialtyLabel,
+      specialtyLabelFr:
+          data['specialtyLabel_fr']?.toString() ?? legacySpecialtyLabel,
+
+      governorateId: asString(data['governorateId']),
+      governorateLabel: asString(data['governorateLabel']),
+
       phone: asString(data['phone']),
-      price: (data['price'] ?? 0).toDouble(),
-      isPriceVisible: data['isPriceVisible'] ?? false,
+      address: asString(data['address']),
+
+      subscriptionActive: data['subscriptionActive'] ?? true,
+
+      rating: asDouble(data['rating']),
+      price: data['price'] == null ? null : asDouble(data['price']),
+
       isAvailable: data['isAvailable'] ?? true,
-      slots: List<String>.from(data['slots'] ?? []),
+      isPriceVisible: data['isPriceVisible'] ?? false,
 
       photoUrl: (data['photoUrl'] == null || data['photoUrl'] == '')
           ? null

@@ -1,7 +1,9 @@
 // lib/features/admin/ui/admin_login_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:medical_booking/features/admin/ui/admin_dashboard_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -28,8 +30,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   }
 
   Future<void> _signInAdmin() async {
-    final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) return;
+    final t = AppLocalizations.of(context)!;
+
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() {
       _loading = true;
@@ -37,56 +40,50 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     });
 
     try {
-      // 1) تسجيل الدخول
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
 
       final uid = cred.user?.uid;
-      if (uid == null) throw Exception('UID غير متاح');
+      if (uid == null) throw Exception(t.uidUnavailable);
 
-      // 2) جلب وثيقة المستخدم للتحقق من الدور
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
 
       if (!doc.exists) {
-        // لا نترك الجلسة مفتوحة
         await FirebaseAuth.instance.signOut();
-        throw Exception('لا تملك صلاحية الوصول');
+        throw Exception(t.noAccess);
       }
 
-      final role = (doc.data()?['role'] ?? '') as String;
-      if (role.toLowerCase() != 'admin') {
+      final role = (doc.data()?['role'] ?? '').toString().toLowerCase();
+      if (role != 'admin') {
         await FirebaseAuth.instance.signOut();
-        throw Exception('ممنوع الوصول — هذا الحساب ليس أدمن');
+        throw Exception(t.notAdminAccount);
       }
 
       if (!mounted) return;
-
-      // 3) نجاح → الانتقال إلى لوحة الأدمن
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      // رسائل واضحة للمطوّر والمستخدم
       String msg;
       switch (e.code) {
         case 'invalid-email':
-          msg = 'البريد غير صحيح';
+          msg = t.invalidEmail;
           break;
         case 'user-disabled':
-          msg = 'تم تعطيل هذا الحساب';
+          msg = t.accountDisabled;
           break;
         case 'user-not-found':
         case 'wrong-password':
-          msg = 'البريد أو كلمة المرور غير صحيحة';
+          msg = t.emailOrPasswordWrong;
           break;
         default:
-          msg = 'تعذر تسجيل الدخول: ${e.message ?? e.code}';
+          msg = "${t.loginFailed}: ${e.message ?? e.code}";
       }
       setState(() => _error = msg);
     } catch (e) {
@@ -97,32 +94,34 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   }
 
   Future<void> _sendResetEmail() async {
+    final t = AppLocalizations.of(context)!;
+
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      setState(() => _error = 'أدخل البريد أولًا لإرسال رابط الاستعادة');
+      setState(() => _error = t.enterEmailFirst);
       return;
     }
+
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إرسال رابط إعادة تعيين كلمة المرور')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.resetLinkSent)));
     } catch (e) {
-      setState(() => _error = 'تعذر إرسال رابط الاستعادة');
+      setState(() => _error = t.resetFailed);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
 
     return GestureDetector(
-      onTap: () => FocusScope.of(
-        context,
-      ).unfocus(), // إغلاق الكيبورد عند اللمس خارج الحقول
+      onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        appBar: AppBar(title: const Text('تسجيل دخول الأدمن')),
+        appBar: AppBar(title: Text(t.adminLogin)),
         body: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -133,20 +132,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // أيقونة/عنوان بسيط
                     const Icon(
                       Icons.admin_panel_settings,
                       size: 64,
                       color: Colors.teal,
                     ),
                     const SizedBox(height: 12),
+
                     Text(
-                      'دخول الأدمن',
+                      t.adminEntry,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+
                     const SizedBox(height: 24),
 
                     // البريد
@@ -154,19 +154,20 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       controller: _emailCtrl,
                       keyboardType: TextInputType.emailAddress,
                       textDirection: TextDirection.ltr,
-                      decoration: const InputDecoration(
-                        labelText: 'البريد الإلكتروني',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: t.email,
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (v) {
-                        final value = (v ?? '').trim();
-                        if (value.isEmpty) return 'أدخل البريد';
+                        final value = (v ?? "").trim();
+                        if (value.isEmpty) return t.enterEmail;
                         if (!value.contains('@') || !value.contains('.')) {
-                          return 'صيغة البريد غير صحيحة';
+                          return t.invalidEmailFormat;
                         }
                         return null;
                       },
                     ),
+
                     const SizedBox(height: 12),
 
                     // كلمة المرور
@@ -174,10 +175,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       controller: _passCtrl,
                       obscureText: _obscure,
                       decoration: InputDecoration(
-                        labelText: 'كلمة المرور',
+                        labelText: t.password,
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
-                          tooltip: _obscure ? 'إظهار' : 'إخفاء',
+                          tooltip: _obscure ? t.show : t.hide,
                           onPressed: () => setState(() => _obscure = !_obscure),
                           icon: Icon(
                             _obscure ? Icons.visibility : Icons.visibility_off,
@@ -185,8 +186,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         ),
                       ),
                       validator: (v) {
-                        if ((v ?? '').isEmpty) return 'أدخل كلمة المرور';
-                        if ((v ?? '').length < 6) return 'كلمة المرور قصيرة';
+                        final value = v ?? "";
+                        if (value.isEmpty) return t.enterPassword;
+                        if (value.length < 6) return t.passwordShort;
                         return null;
                       },
                     ),
@@ -217,7 +219,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                                 ),
                               )
                             : const Icon(Icons.lock_open),
-                        label: const Text('دخول الأدمن'),
+                        label: Text(t.adminLogin),
                       ),
                     ),
 
@@ -227,18 +229,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       alignment: Alignment.centerLeft,
                       child: TextButton(
                         onPressed: _loading ? null : _sendResetEmail,
-                        child: const Text('نسيت كلمة المرور؟'),
+                        child: Text(t.forgotPassword),
                       ),
                     ),
 
                     const SizedBox(height: 8),
 
-                    // تلميح صغير: هذه شاشة خاصة
-                    const Center(
+                    Center(
                       child: Text(
-                        'هذه الشاشة خاصة بالأدمن.\nتم الوصول إليها عبر الحركة السرّية.',
+                        t.adminScreenHint,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+                        style: const TextStyle(color: Colors.grey),
                       ),
                     ),
                   ],
