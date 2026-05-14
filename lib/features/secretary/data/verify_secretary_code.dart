@@ -1,14 +1,18 @@
-// lib/features/secretary/data/verify_secretary_code.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:medical_booking/generated_l10n/app_localizations.dart';
-import 'package:flutter/widgets.dart';
 
 class VerifyResult {
   final bool ok;
   final String? doctorId;
+
+  /// معرّف الوثيقة (قد يكون مساويًا للكود النصّي إذا استُخدم كـ docId)
   final String? codeId;
+
+  /// الكود النصّي داخل الوثيقة (إن وُجد)، نرجّعه للتكامل
   final String? code;
+
+  /// تاريخ الانتهاء (إن وُجد في الوثيقة العامة)
   final DateTime? expiresAt;
+
   final String? reason;
 
   const VerifyResult({
@@ -44,103 +48,56 @@ class SecretaryCodeVerifier {
   SecretaryCodeVerifier([FirebaseFirestore? db])
     : _db = db ?? FirebaseFirestore.instance;
 
-  /// التحقق من كود السكرتير
-  /// يعتمد على:
-  /// 1) secretary_codes_public/{code}
-  /// 2) secretary_codes/{code} (fallback)
-  Future<VerifyResult> verify(String rawCode, BuildContext context) async {
-    final t = AppLocalizations.of(context)!;
-
-    final code = rawCode.trim();
+  /// يتحقق من الكود في:
+  /// 1) secretary_codes_public/{code}  (docId == الكود) ← مفضّل
+  /// 2) secretary_codes/{code}        (fallback)        ← يتطلب Rule: allow get
+  ///
+  /// يعيد: doctorId, codeId, code, expiresAt (إن وجدت)
+  Future<VerifyResult> verify(String rawCode) async {
+    final code = rawCode.trim().toUpperCase();
     if (code.isEmpty) {
-      return VerifyResult(ok: false, reason: t.enterCode);
+      return const VerifyResult(ok: false, reason: 'أدخل الكود');
     }
 
     try {
-      // ----------------------------
-      // ✅ المسار 1: المجموعة العامة
-      // ----------------------------
       final pubDoc = await _db
           .collection('secretary_codes_public')
           .doc(code)
           .get();
 
-      if (pubDoc.exists) {
-        final data = pubDoc.data()!;
-        final bool active = (data['active'] == true);
-
-        final Timestamp? expiresTs = data['expiresAt'] as Timestamp?;
-        final DateTime? expiresAt = expiresTs?.toDate();
-
-        final bool expired =
-            expiresAt != null && expiresAt.isBefore(DateTime.now());
-
-        if (!active) {
-          return VerifyResult(ok: false, reason: t.codeInactive);
-        }
-        if (expired) {
-          return VerifyResult(ok: false, reason: t.codeExpired);
-        }
-
-        final String? doctorId = data['doctorId'] as String?;
-        if (doctorId == null || doctorId.isEmpty) {
-          return VerifyResult(ok: false, reason: t.codeIncomplete);
-        }
-
-        final String? codeField = data['code'] as String?;
-
-        return VerifyResult(
-          ok: true,
-          doctorId: doctorId,
-          codeId: pubDoc.id,
-          code: codeField ?? pubDoc.id,
-          expiresAt: expiresAt,
-        );
+      if (!pubDoc.exists) {
+        return const VerifyResult(ok: false, reason: 'الكود غير موجود');
       }
 
-      // ----------------------------
-      // ✅ المسار 2: fallback
-      // ----------------------------
-      final rootDoc = await _db.collection('secretary_codes').doc(code).get();
-
-      if (!rootDoc.exists) {
-        return VerifyResult(ok: false, reason: t.codeNotFound);
+      final data = pubDoc.data()!;
+      if (data['active'] != true) {
+        return const VerifyResult(ok: false, reason: 'الكود معطّل');
       }
 
-      final rdata = rootDoc.data()!;
-      final bool rActive = (rdata['active'] == true);
-
-      final Timestamp? rExpiresTs = rdata['expiresAt'] as Timestamp?;
-      final DateTime? rExpiresAt = rExpiresTs?.toDate();
-
-      final bool rExpired =
-          rExpiresAt != null && rExpiresAt.isBefore(DateTime.now());
-
-      if (!rActive) {
-        return VerifyResult(ok: false, reason: t.codeInactive);
-      }
-      if (rExpired) {
-        return VerifyResult(ok: false, reason: t.codeExpired);
+      final Timestamp? expiresTs = data['expiresAt'] as Timestamp?;
+      if (expiresTs != null && expiresTs.toDate().isBefore(DateTime.now())) {
+        return const VerifyResult(ok: false, reason: 'الكود منتهي الصلاحية');
       }
 
-      final String? rDoctorId = rdata['doctorId'] as String?;
-      if (rDoctorId == null || rDoctorId.isEmpty) {
-        return VerifyResult(ok: false, reason: t.codeIncomplete);
+      final String? doctorId = data['doctorId'] as String?;
+      if (doctorId == null || doctorId.isEmpty) {
+        return const VerifyResult(ok: false, reason: 'بيانات الكود غير مكتملة');
       }
-
-      final String? rCodeField = rdata['code'] as String?;
 
       return VerifyResult(
         ok: true,
-        doctorId: rDoctorId,
-        codeId: rootDoc.id,
-        code: rCodeField ?? rootDoc.id,
-        expiresAt: rExpiresAt,
+        doctorId: doctorId,
+        codeId: pubDoc.id,
+        code: data['code'] as String? ?? pubDoc.id,
+        expiresAt: expiresTs?.toDate(),
       );
     } on FirebaseException catch (e) {
-      return VerifyResult(ok: false, reason: "${t.connectionError}: ${e.code}");
+      return VerifyResult(ok: false, reason: 'خطأ في الاتصال (${e.code})');
     } catch (_) {
-      return VerifyResult(ok: false, reason: t.unexpectedError);
+      return const VerifyResult(
+        ok: false,
+        reason: 'خطأ غير متوقع أثناء التحقق',
+      );
     }
   }
 }

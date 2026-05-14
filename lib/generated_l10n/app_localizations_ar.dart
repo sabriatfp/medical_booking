@@ -12,6 +12,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appTitle => 'Medical Booking';
 
   @override
+  String get failedToLoadUserData => 'تعذر تحميل بيانات المستخدم';
+
+  @override
+  String get invalidUserRole => 'حساب غير صالح، يرجى تسجيل الدخول من جديد';
+
+  @override
   String get scheduleSettings => 'إعدادات التوقيت';
 
   @override
@@ -60,6 +66,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get settingsSaved => 'تم حفظ الإعدادات بنجاح';
 
   @override
+  String get userNotFound => 'لا يوجد حساب بهذا البريد الإلكتروني';
+
+  @override
+  String get wrongPassword => 'كلمة المرور غير صحيحة';
+
+  @override
+  String get userDisabled => 'هذا الحساب معطّل';
+
+  @override
+  String get tooManyRequests => 'محاولات كثيرة، حاول لاحقًا';
+
+  @override
   String get from => 'من';
 
   @override
@@ -79,6 +97,23 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get saveChanges => 'حفظ التغييرات';
+
+  @override
+  String get subscriptionExpiredMessage =>
+      'لقد انتهت مدة اشتراكك. لا يمكنك استخدام خدمات التطبيق حتى يتم تجديد الاشتراك.';
+
+  @override
+  String get subscriptionEndedAt => 'تاريخ انتهاء الاشتراك';
+
+  @override
+  String get contactAdministration => 'التواصل مع الإدارة';
+
+  @override
+  String get contactAdminHint =>
+      'يرجى التواصل مع إدارة التطبيق لتجديد الاشتراك';
+
+  @override
+  String get resetFilters => 'إعادة تحيين الفلاتر';
 
   @override
   String get doctorCalendar => 'تقويم الطبيب';
@@ -159,7 +194,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get subscriptionTrial => 'تجريبي';
 
   @override
-  String get subscriptionExpired => 'اشتراك الطبيب منتهي';
+  String get subscriptionExpired => 'منتهي';
 
   @override
   String get subscriptionEndsAt => 'ينتهي في';
@@ -208,6 +243,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteDayOff => 'حذف يوم الغياب';
+
+  @override
+  String get tapToChoose => 'اضغط للاختيار';
 
   @override
   String get doctorDashboard => 'لوحة الطبيب';
@@ -635,6 +673,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noResults => 'لا توجد نتائج';
 
   @override
+  String get cannotConfirmPastAppointment => 'لا يمكن تأكيد موعد في تاريخ سابق';
+
+  @override
   String get reportMarkedProcessed => 'تم تعليم البلاغ كمُعالج';
 
   @override
@@ -1009,9 +1050,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get secretaryCodeExample => 'مثال: ABC123';
 
   @override
-  String get failedToLoadUserData => 'فشل تحميل بيانات المستخدم';
-
-  @override
   String get searchReports => 'بحث في البلاغات';
 
   @override
@@ -1167,4 +1205,130 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get currentPasswordIncorrect => 'كلمة المرور الحالية غير صحيحة';
+
+  @override
+  String get subscriptionRequests => 'طلبات تجديد الاشتراك';
+
+  @override
+  String get noSubscriptionRequests => 'لا توجد طلبات حالياً';
+
+  @override
+  String get requestDate => 'تاريخ الطلب';
+
+  @override
+  String get unknownDoctor => 'طبيب غير معروف';
+
+  @override
+  String get reject => 'رفض';
+
+  @override
+  String get subscriptionRequestsSubtitle =>
+      'طلبات تجديد الاشتراك المرسلة من الأطباء';
+
+  @override
+  String get requestSubscriptionRenewal => 'طلب تجديد الاشتراك';
+
+  @override
+  String get subscriptionRequestSent =>
+      'تم إرسال طلب تجديد الاشتراك، سيتم التواصل معك قريبًا';
+
+  @override
+  String get subscriptionRequestAlreadySent =>
+      'لقد أرسلت طلب تجديد من قبل، يرجى انتظار رد الإدارة';
+
+  @override
+  String get noCodes => 'لا توجد أكواد';
+
+  @override
+  String get optionalExpiryDate => 'إضافة تاريخ انتهاء (اختياري)';
+
+  @override
+  String get chooseDate => 'اختيار تاريخ';
+
+  @override
+  String get expiresOn => 'ينتهي في';
+
+  @override
+  String get codeNotValid => 'الكود غير صحيح';
+
+  @override
+  String get confirmDelete => 'هل أنت متأكد من الحذف؟';
+
+  @override
+  String get invalidCodeFormat => 'صيغة الكود غير صحيحة';
+
+  @override
+  String get copy => 'نسخ';
+
+  @override
+  String get enterSecretaryCode => 'أدخل كود السكرتير الذي زوّدك به الطبيب';
+
+  @override
+  String get usedBy => 'استُعمل من قبل';
+
+  @override
+  String get monday => 'الإثنين';
+
+  @override
+  String get tuesday => 'الثلاثاء';
+
+  @override
+  String get wednesday => 'الأربعاء';
+
+  @override
+  String get thursday => 'الخميس';
+
+  @override
+  String get friday => 'الجمعة';
+
+  @override
+  String get saturday => 'السبت';
+
+  @override
+  String get sunday => 'الأحد';
+
+  @override
+  String get acceptBookings => 'استقبال الحجوزات';
+
+  @override
+  String get acceptBookingsOn => 'الطبيب ظاهر ويقبل حجوزات جديدة';
+
+  @override
+  String get acceptBookingsOff => 'الطبيب غير متاح حاليًا';
+
+  @override
+  String get bookingsEnabled => 'تم تفعيل استقبال الحجوزات';
+
+  @override
+  String get bookingsDisabled => 'تم إيقاف استقبال الحجوزات';
+
+  @override
+  String get savePrice => 'حفظ السعر';
+
+  @override
+  String get saving => 'جاري الحفظ...';
+
+  @override
+  String get priceSavedSuccessfully => 'تم حفظ السعر بنجاح';
+
+  @override
+  String get invalidPrice => 'الرجاء إدخال سعر صحيح';
+
+  @override
+  String get confirmCancelAppointment => 'هل أنت متأكد من إلغاء هذا الموعد؟';
+
+  @override
+  String get yesCancel => 'نعم، إلغاء';
+
+  @override
+  String get no => 'تراجع';
+
+  @override
+  String get enterPaidAmount => 'إدخال المبلغ المدفوع';
+
+  @override
+  String get amountHint => 'المبلغ';
+
+  @override
+  String get currency => 'دت';
 }

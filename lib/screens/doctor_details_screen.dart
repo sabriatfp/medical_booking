@@ -57,14 +57,15 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
     daysOff = offSnap.docs.map((d) => (d['date'] as String).trim()).toSet();
 
-    // ✅✅✅ 4️⃣ هنا بالضبط نطبّق Rolling
-    await DoctorService.normalizeRollingWeeks(
-      doctorId: doctorId,
-      weeklyTemplate: weeklyTemplate,
-      exceptionalDaysOff: daysOff,
-      slotDuration: slotDuration,
-    );
-
+    if (scheduleData?['weeks'] == null || scheduleData!['weeks'].isEmpty) {
+      // ✅✅✅ 4️⃣ هنا بالضبط نطبّق Rolling
+      await DoctorService.normalizeRollingWeeks(
+        doctorId: doctorId,
+        weeklyTemplate: weeklyTemplate,
+        exceptionalDaysOff: daysOff,
+        slotDuration: slotDuration,
+      );
+    }
     // 5️⃣ إعادة قراءة وثيقة الطبيب بعد Rolling
     final refreshedSnap = await doctorRef.get();
     scheduleData = refreshedSnap.data();
@@ -92,7 +93,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   }
 
   bool _canBookDoctor() {
-    return widget.doctor.isAvailable && widget.doctor.subscriptionActive;
+    return widget.doctor.isAvailable;
   }
 
   // ===============================
@@ -139,11 +140,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                           ),
                         ),
                       ),
-                      availabilityBadge(
-                        widget.doctor.isAvailable,
-                        widget.doctor.subscriptionActive,
-                        t,
-                      ),
+
+                      availabilityBadge(widget.doctor.isAvailable, t),
                     ],
                   ),
 
@@ -245,9 +243,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Center(
                 child: Text(
-                  widget.doctor.subscriptionActive == false
-                      ? t.subscriptionExpired
-                      : t.doctorNotAvailable,
+                  t.doctorNotAvailable,
                   style: const TextStyle(
                     color: Colors.red,
                     fontWeight: FontWeight.bold,
@@ -294,15 +290,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   // ===============================
   // ✅ Widgets مساعدة
   // ===============================
-  Widget availabilityBadge(
-    bool isAvailable,
-    bool subscriptionActive,
-    AppLocalizations t,
-  ) {
-    if (!subscriptionActive) {
-      return _badge(t.subscriptionExpired, Colors.grey, Icons.lock);
-    }
-
+  Widget availabilityBadge(bool isAvailable, AppLocalizations t) {
     return isAvailable
         ? _badge(t.available, Colors.green, Icons.check_circle)
         : _badge(t.notAvailable, Colors.red, Icons.cancel);
@@ -343,8 +331,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         final isDayOff = daysOff.contains(date);
 
         // ✅ القرار النهائي للحجز
-        final canBook = availableInWeeks && !full && !isDayOff;
-
+        final canBook =
+            widget.doctor.isAvailable && availableInWeeks && !full && !isDayOff;
         Color cardColor;
         String subtitle;
 
@@ -369,20 +357,27 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
             title: Text(date),
             subtitle: Text(subtitle),
             enabled: canBook,
-            onTap: canBook
-                ? () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SlotsScreen(
-                          doctor: widget.doctor,
-                          date: date,
-                          scheduleData: scheduleData,
-                        ),
-                      ),
-                    );
-                  }
-                : null,
+            onTap: () {
+              if (!widget.doctor.isAvailable) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(t.doctorNotAvailable)));
+                return;
+              }
+
+              if (canBook) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SlotsScreen(
+                      doctor: widget.doctor,
+                      date: date,
+                      scheduleData: scheduleData,
+                    ),
+                  ),
+                );
+              }
+            },
           ),
         );
       }).toList(),

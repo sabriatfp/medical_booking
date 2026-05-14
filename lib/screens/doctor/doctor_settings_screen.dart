@@ -23,8 +23,10 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
   final currentPasswordController = TextEditingController();
   final newPasswordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
-
+  bool savingPrice = false;
   bool isPriceVisible = true;
+  bool isAvailable = true;
+  bool updatingAvailability = false;
 
   String? doctorId;
   bool loading = true;
@@ -97,6 +99,8 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
       addressController.text = data['address'] ?? '';
       priceController.text = (data['price'] ?? 0).toString();
       isPriceVisible = data['isPriceVisible'] ?? true;
+
+      isAvailable = data['isAvailable'] ?? true;
 
       selectedGovernorateId = data['governorateId'];
       selectedSpecialtyId = data['specialtyId'];
@@ -236,19 +240,78 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
             ),
 
             const SizedBox(height: 16),
+            _card(
+              child: SwitchListTile(
+                title: Text(t.acceptBookings),
+                subtitle: Text(
+                  isAvailable ? t.acceptBookingsOn : t.acceptBookingsOff,
+                ),
+                value: isAvailable,
+                onChanged: updatingAvailability
+                    ? null
+                    : (v) async {
+                        if (doctorId == null) return;
 
+                        setState(() => updatingAvailability = true);
+
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('doctors')
+                              .doc(doctorId)
+                              .update({'isAvailable': v});
+
+                          setState(() => isAvailable = v);
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                v ? t.bookingsEnabled : t.bookingsDisabled,
+                              ),
+                            ),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("${t.updateFailed}: $e")),
+                          );
+                        } finally {
+                          if (mounted) {
+                            setState(() => updatingAvailability = false);
+                          }
+                        }
+                      },
+              ),
+            ),
             _card(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _field(
                     priceController,
                     t.sessionPrice,
                     keyboard: TextInputType.number,
                   ),
+
                   SwitchListTile(
                     title: Text(t.showPrice),
                     value: isPriceVisible,
                     onChanged: (v) => setState(() => isPriceVisible = v),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  ElevatedButton.icon(
+                    onPressed: savingPrice ? null : savePriceOnly,
+                    icon: savingPrice
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.save),
+                    label: Text(savingPrice ? t.saving : t.savePrice),
                   ),
                 ],
               ),
@@ -335,6 +398,44 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> savePriceOnly() async {
+    final t = AppLocalizations.of(context)!;
+
+    if (doctorId == null) return;
+
+    final parsedPrice = double.tryParse(priceController.text);
+
+    if (parsedPrice == null || parsedPrice <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.invalidPrice)));
+      return;
+    }
+
+    setState(() => savingPrice = true);
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('doctors')
+          .doc(doctorId)
+          .update({
+            'price': parsedPrice,
+            'isPriceVisible': isPriceVisible,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.priceSavedSuccessfully)));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("${t.updateFailed}: $e")));
+    } finally {
+      if (mounted) setState(() => savingPrice = false);
+    }
   }
 
   Widget _card({required Widget child}) {

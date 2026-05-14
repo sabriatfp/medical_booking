@@ -54,23 +54,29 @@ class _DoctorsFilterScreenState extends State<DoctorsFilterScreen> {
   }
 
   Future<void> searchDoctors() async {
-    if (selectedGovernorateId == null || selectedSpecialtyId == null) return;
-
     setState(() {
       searching = true;
       doctors = [];
     });
 
-    final snap = await FirebaseFirestore.instance
-        .collection('doctors')
-        .where('governorateId', isEqualTo: selectedGovernorateId)
-        .where('specialtyId', isEqualTo: selectedSpecialtyId)
-        .get();
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection(
+      'doctors',
+    );
+
+    // ✅ فلترة حسب الولاية (اختياري)
+    if (selectedGovernorateId != null && selectedGovernorateId!.isNotEmpty) {
+      query = query.where('governorateId', isEqualTo: selectedGovernorateId);
+    }
+
+    // ✅ فلترة حسب الاختصاص (اختياري)
+    if (selectedSpecialtyId != null && selectedSpecialtyId!.isNotEmpty) {
+      query = query.where('specialtyId', isEqualTo: selectedSpecialtyId);
+    }
+
+    final snap = await query.get();
 
     setState(() {
-      doctors = snap.docs
-          .map((d) => Doctor.fromMap(d.id, d.data() as Map<String, dynamic>))
-          .toList();
+      doctors = snap.docs.map((d) => Doctor.fromMap(d.id, d.data())).toList();
       searching = false;
     });
   }

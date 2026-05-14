@@ -33,6 +33,31 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
     setState(() => loading = false);
   }
 
+  Future<bool> _confirmCancelDialog(BuildContext context) async {
+    final t = AppLocalizations.of(context)!;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t.cancelAppointment),
+        content: Text(t.confirmCancelAppointment),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t.no),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(t.yesCancel),
+          ),
+        ],
+      ),
+    );
+
+    return result == true;
+  }
+
   Stream<List<Map<String, dynamic>>> _myAppointments() {
     if (patientId == null) return const Stream.empty();
 
@@ -59,6 +84,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               'doctorSpecialty': data['doctorSpecialty'] ?? '',
               'dateTime': dt,
               'status': data['status'] ?? 'pending',
+
+              'slotId': data['slotId'], // ✅ مهم جدًا
             });
           }
 
@@ -210,52 +237,97 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      PopupMenuButton<String>(
-                        onSelected: (v) async {
-                          try {
-                            if (v == 'delete' && a['id'] != null) {
-                              await FirebaseFirestore.instance
-                                  .collection('appointments')
-                                  .doc(a['id'])
-                                  .delete();
-
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(t.appointmentDeleted)),
-                                );
-                              }
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(t.operationFailed)),
-                              );
-                            }
-                          }
-                        },
-
-                        itemBuilder: (_) => [
-                          // ✅ يظهر فقط إذا كان الموعد ملغى
-                          if (status == 'canceled')
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.red,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    t.deleteAppointment,
-                                    style: const TextStyle(color: Colors.red),
-                                  ),
-                                ],
+                      // ✅ أزرار الإجراء
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // 🔴 زر إلغاء الموعد
+                          if (status == 'pending' || status == 'confirmed')
+                            TextButton.icon(
+                              icon: const Icon(
+                                Icons.cancel_outlined,
+                                color: Colors.orange,
                               ),
+                              label: Text(
+                                t.cancelAppointment,
+                                style: const TextStyle(color: Colors.orange),
+                              ),
+                              onPressed: () async {
+                                final confirmed = await _confirmCancelDialog(
+                                  context,
+                                );
+                                if (!confirmed) return;
+
+                                final slotId = a['slotId'];
+                                if (slotId == null || slotId.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(t.operationFailed)),
+                                  );
+                                  return;
+                                }
+
+                                try {
+                                  await _doctorService.cancelAppointment(
+                                    appointmentId: a['id'],
+                                    slotId: slotId,
+                                  );
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(t.appointmentCanceled),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(t.operationFailed),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+
+                          // 🗑️ زر حذف الموعد
+                          if (status == 'canceled')
+                            TextButton.icon(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              label: Text(
+                                t.deleteAppointment,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await FirebaseFirestore.instance
+                                      .collection('appointments')
+                                      .doc(a['id'])
+                                      .delete();
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(t.appointmentDeleted),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(t.operationFailed),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
                             ),
                         ],
-
-                        icon: const Icon(Icons.more_vert),
                       ),
                     ],
                   ),

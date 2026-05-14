@@ -30,12 +30,17 @@ class _SlotsScreenState extends State<SlotsScreen> {
   }
 
   Future<void> _loadDaysOff() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('doctor_days_off')
-        .where('doctorId', isEqualTo: widget.doctor.id)
-        .get();
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('doctor_days_off')
+          .where('doctorId', isEqualTo: widget.doctor.id)
+          .get();
 
-    _daysOff = snap.docs.map((d) => (d['date'] as String).trim()).toSet();
+      _daysOff = snap.docs.map((d) => (d['date'] as String).trim()).toSet();
+    } catch (e) {
+      _daysOff = {};
+    }
+
     if (mounted) setState(() {});
   }
 
@@ -125,6 +130,14 @@ class _SlotsScreenState extends State<SlotsScreen> {
     final fs = FirebaseFirestore.instance;
     final slotId = "${widget.doctor.id}_${widget.date}_$time";
     final slotRef = fs.collection('doctor_slots').doc(slotId);
+    final existingSlot = await slotRef.get();
+    if (existingSlot.exists) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t.slotAlreadyTaken)));
+      setState(() => _loading = false);
+      return;
+    }
     final appointmentRef = fs.collection('appointments').doc();
 
     final docSnap = await FirebaseFirestore.instance
@@ -135,6 +148,12 @@ class _SlotsScreenState extends State<SlotsScreen> {
     final doctorData = docSnap.data() ?? {};
     final doctorName = doctorData['name'] ?? '';
     final doctorSpecialty = doctorData['specialtyLabel'] ?? '';
+    final doctorUid = doctorData['ownerUid'];
+
+    if (doctorUid == null) {
+      throw Exception("doctor_uid_missing");
+    }
+
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
@@ -166,14 +185,17 @@ class _SlotsScreenState extends State<SlotsScreen> {
 
         t1.set(slotRef, {
           "doctorId": widget.doctor.id,
+          "doctorUid": doctorUid,
+
           "date": widget.date,
           "time": time,
           "taken": true,
           "patientId": user.uid,
-        }, SetOptions(merge: true));
+        });
 
         t1.set(appointmentRef, {
           "doctorId": widget.doctor.id,
+          "doctorUid": doctorUid,
           "patientId": user.uid,
           "doctorName": doctorName,
           "doctorSpecialty": doctorSpecialty,
@@ -198,7 +220,12 @@ class _SlotsScreenState extends State<SlotsScreen> {
         message = t.slotAlreadyTaken;
       } else if (e.toString().contains("invalid_slot")) {
         message = t.invalidSlot;
+      } else if (e.toString().contains("doctor_uid_missing")) {
+        message = t.unexpectedError; // أو نص مخصص لاحقًا
       }
+
+      // ✅ مفيد جدًا للتشخيص
+      debugPrint("Booking error: $e");
 
       ScaffoldMessenger.of(
         context,

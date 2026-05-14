@@ -1,5 +1,5 @@
 // lib/screens/doctor/appointments_today_screen.dart
-
+import 'package:medical_booking/services/doctor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
@@ -168,8 +168,17 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
                                 label: t.checkIn,
                                 color: Colors.blue,
                                 onTap: () async {
+                                  final amount = await _askPaidAmount(context);
+                                  if (amount == null) return;
+
                                   try {
-                                    await _updateStatus(ref.id, 'checked_in');
+                                    await DoctorService().checkInAppointment(
+                                      appointmentId: ref.id,
+                                      doctorId: widget.doctorId,
+                                      patientId: d['patientId'],
+                                      amount: amount,
+                                    );
+
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text(t.checkedIn)),
@@ -206,6 +215,42 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
         },
       ),
     );
+  }
+
+  Future<double?> _askPaidAmount(BuildContext context) async {
+    final t = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t.enterPaidAmount),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            hintText: t.amountHint,
+            suffixText: t.currency,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(t.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = double.tryParse(controller.text);
+              if (value == null || value <= 0) return;
+              Navigator.pop(ctx, value);
+            },
+            child: Text(t.confirm),
+          ),
+        ],
+      ),
+    );
+
+    return result;
   }
 
   String _statusLabel(String s, AppLocalizations t) {

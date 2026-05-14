@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
-import 'package:medical_booking/features/secretary/data/verify_secretary_code.dart';
+import 'package:medical_booking/screens/login_screen.dart';
 import 'package:medical_booking/screens/secretary/secretary_dashboard_screen.dart';
 
 class SecretaryCodeScreen extends StatefulWidget {
@@ -15,7 +15,8 @@ class SecretaryCodeScreen extends StatefulWidget {
 }
 
 class _SecretaryCodeScreenState extends State<SecretaryCodeScreen> {
-  final TextEditingController _codeCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
+
   bool _loading = false;
   String? _error;
 
@@ -25,77 +26,128 @@ class _SecretaryCodeScreenState extends State<SecretaryCodeScreen> {
     super.dispose();
   }
 
-  // ✅ التأكّد من وجود مستخدم (حتى لو مجهول)
+  /* ============================= */
+  /* AUTH (Anonymous)              */
+  /* ============================= */
+
   Future<User> _ensureUser() async {
     final auth = FirebaseAuth.instance;
-    final cu = auth.currentUser;
-
-    if (cu != null) return cu;
+    if (auth.currentUser != null) {
+      return auth.currentUser!;
+    }
     final cred = await auth.signInAnonymously();
     return cred.user!;
   }
 
-  // ✅ جلب الكود العام
-  Future<({String doctorId, String codeId, DateTime? expiresAt})>
-  _fetchPublicCode(String rawCode) async {
+  /* ============================= */
+  /* VERIFY CODE (PUBLIC)          */
+  /* ============================= */
+
+  Future<({String doctorId, String codeId})> _verifyCode(String rawCode) async {
+    final db = FirebaseFirestore.instance;
     final codeId = rawCode.trim().toUpperCase();
-    final ref = FirebaseFirestore.instance
-        .collection('secretary_codes_public')
-        .doc(codeId);
 
-    final snap = await ref.get();
+    final doc = await db.collection('secretary_codes_public').doc(codeId).get();
 
-    if (!snap.exists) {
-      throw StateError("الكود غير صحيح.");
+    if (!doc.exists) {
+      throw StateError(AppLocalizations.of(context)!.codeNotValid);
     }
 
-    final data = snap.data()!;
-    final bool active = data['active'] == true;
+    final data = doc.data()!;
 
-    if (!active) throw StateError("الكود غير مفعّل.");
-
-    final doctorId = (data['doctorId'] ?? "").toString();
-    if (doctorId.isEmpty) throw StateError("doctorId غير موجود.");
-
-    DateTime? expiresAt;
-    final any = data['expiresAt'];
-    if (any is Timestamp) {
-      expiresAt = any.toDate();
-      if (expiresAt.isBefore(DateTime.now())) {
-        throw StateError("انتهت صلاحية الكود.");
-      }
+    if (data['active'] != true) {
+      throw StateError(AppLocalizations.of(context)!.codeInactive);
     }
 
-    return (doctorId: doctorId, codeId: codeId, expiresAt: expiresAt);
+    final doctorId = (data['doctorId'] ?? '').toString();
+    if (doctorId.isEmpty) {
+      throw StateError(AppLocalizations.of(context)!.invalidCodeFormat);
+    }
+
+    final Timestamp? expiresTs = data['expiresAt'] as Timestamp?;
+    if (expiresTs != null && expiresTs.toDate().isBefore(DateTime.now())) {
+      throw StateError(AppLocalizations.of(context)!.codeExpired);
+    }
+
+    return (doctorId: doctorId, codeId: codeId);
   }
 
-  // ✅ إنشاء جلسة السكرتير
-  Future<void> _createSecretarySession({
+  /* ============================= */
+  /* ENSURE SECRETARY DOCUMENT     */
+  /* ============================= */
+
+  Future<void> _ensureSecretaryDoc({
     required String uid,
     required String doctorId,
     required String codeId,
   }) async {
-    final fs = FirebaseFirestore.instance;
+    final db = FirebaseFirestore.instance;
+    final ref = db.collection('secretaries').doc(uid);
 
-    final sessionId = "${uid}_$doctorId";
+    final snap = await ref.get();
+    if (snap.exists) return;
 
-    await fs.collection('secretary_sessions').doc(sessionId).set({
-      "secretaryUid": uid,
-      "doctorId": doctorId,
-      "active": true,
-      "startedAt": FieldValue.serverTimestamp(),
-      "codeId": codeId,
+    await ref.set({
+      'uid': uid,
+      'doctorId': doctorId,
+      'codeUsed': codeId,
+      'active': true,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /* ============================= */
+  /* CREATE SESSION (AUDIT)        */
+  /* ============================= */
+
+  Future<void> _createSession({
+    required String uid,
+    required String doctorId,
+    required String codeId,
+  }) async {
+    final db = FirebaseFirestore.instance;
+
+    await db.collection('secretary_sessions').add({
+      'secretaryUid': uid,
+      'doctorId': doctorId,
+      'codeId': codeId,
+      'status': 'active',
+      'startedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /* ============================= */
+  /* UPDATE USER (PERMISSIONS)     */
+  /* ============================= */
+
+  Future<void> _activateSecretaryRole({
+    required String uid,
+    required String doctorId,
+  }) async {
+    final db = FirebaseFirestore.instance;
+
+    await db.collection('users').doc(uid).set({
+      'role': 'secretary',
+      'activeSecretaryDoctorId': doctorId,
+      'lastLoginAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
-  // ✅ عملية التحقق الشاملة
-  Future<void> _handleVerify({String? overrideCode}) async {
-    final t = AppLocalizations.of(context)!;
+  /* ============================= */
+  /* MAIN FLOW                     */
+  /* ============================= */
 
-    final raw = (overrideCode ?? _codeCtrl.text).trim();
+  Future<void> _handleVerify() async {
+    final raw = _codeCtrl.text.trim().toUpperCase();
+    final t = AppLocalizations.of(context)!;
 
     if (raw.isEmpty) {
       setState(() => _error = t.enterCode);
+      return;
+    }
+
+    if (!raw.startsWith('SEC-') || raw.length < 8) {
+      setState(() => _error = t.invalidCodeFormat);
       return;
     }
 
@@ -106,66 +158,68 @@ class _SecretaryCodeScreenState extends State<SecretaryCodeScreen> {
 
     try {
       final user = await _ensureUser();
+      final result = await _verifyCode(raw);
 
-      final verifier = SecretaryCodeVerifier();
-      final res = await verifier.verify(raw, context);
-      if (!res.ok) {
-        setState(() => _error = res.reason ?? t.codeVerificationFailed);
-        return;
-      }
-
-      final pub = await _fetchPublicCode(raw);
-      final doctorId = pub.doctorId;
-      final codeId = pub.codeId;
-
-      await _createSecretarySession(
+      await _ensureSecretaryDoc(
         uid: user.uid,
-        doctorId: doctorId,
-        codeId: codeId,
+        doctorId: result.doctorId,
+        codeId: result.codeId,
       );
+
+      await _createSession(
+        uid: user.uid,
+        doctorId: result.doctorId,
+        codeId: result.codeId,
+      );
+
+      await _activateSecretaryRole(uid: user.uid, doctorId: result.doctorId);
 
       if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => SecretaryDashboardScreen(doctorId: doctorId),
+          builder: (_) => SecretaryDashboardScreen(doctorId: result.doctorId),
         ),
+        (_) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      String msg = t.authFailed;
-
-      if (e.code == 'operation-not-allowed') {
-        msg = t.anonymousAuthNotEnabled;
-      } else if (e.code == 'network-request-failed') {
-        msg = t.networkError;
-      }
-
-      setState(() => _error = msg);
-      return;
     } on FirebaseException catch (e) {
-      final msg = e.code == 'permission-denied'
-          ? t.permissionDeniedSessions
-          : "${t.operationFailed} (${e.code})";
-
-      setState(() => _error = msg);
-      return;
+      if (!mounted) return;
+      setState(
+        () => _error = e.code == 'permission-denied'
+            ? t.noPermission
+            : '${t.connectionError} (${e.code})',
+      );
     } on StateError catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = t.codeVerificationFailed);
+      if (!mounted) return;
+      setState(() => _error = t.unexpectedError);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  /* ============================= */
+  /* UI                            */
+  /* ============================= */
+
   @override
   Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
+    final t = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: Text(t.secretarySpace)),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          },
+        ),
+        title: Text(t.secretarySpace),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Center(
@@ -175,60 +229,41 @@ class _SecretaryCodeScreenState extends State<SecretaryCodeScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  t.secretaryEnterCodeText,
+                  t.enterSecretaryCode,
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-
                 const SizedBox(height: 16),
-
                 TextField(
                   controller: _codeCtrl,
                   textDirection: TextDirection.ltr,
                   decoration: InputDecoration(
                     labelText: t.secretaryCode,
-                    hintText: t.secretaryCodeExample,
+                    hintText: 'SEC-XXXXXX',
                     border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.key_outlined),
+                    prefixIcon: const Icon(Icons.key),
                   ),
-                  onChanged: (_) {
-                    if (_error != null) {
-                      setState(() => _error = null);
-                    }
-                  },
                   onSubmitted: (_) => _handleVerify(),
                 ),
-
                 const SizedBox(height: 12),
-
                 if (_error != null)
                   Text(
                     _error!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: theme.colorScheme.error,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-
                 const SizedBox(height: 12),
-
                 SizedBox(
                   width: double.infinity,
-                  height: 44,
-                  child: FilledButton.icon(
+                  height: 46,
+                  child: FilledButton(
                     onPressed: _loading ? null : _handleVerify,
-                    icon: _loading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.login_rounded),
-                    label: Text(t.login),
+                    child: _loading
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : Text(t.login),
                   ),
                 ),
               ],

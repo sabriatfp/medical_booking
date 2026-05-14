@@ -20,6 +20,7 @@ import 'doctor/doctor_calendar_screen.dart';
 import 'doctor/doctor_finance_screen.dart';
 import 'doctor/doctor_settings_screen.dart';
 import 'doctor/doctor_onboarding_error_screen.dart';
+import 'doctor/doctor_subscription_expired_screen.dart';
 // Auth
 import 'login_screen.dart';
 
@@ -52,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initUserData() async {
     user = FirebaseAuth.instance.currentUser;
 
+    // 🔐 المستخدم غير مسجل
     if (user == null) {
       if (mounted) {
         Navigator.pushReplacement(
@@ -64,41 +66,82 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final uid = user!.uid;
 
-    final userSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
-
-    final data = userSnap.data() ?? {};
-    isDoctor = (data['role'] ?? '') == 'doctor';
-
-    if (isDoctor) {
-      doctorId = await _doctorService.getDoctorId();
-
-      if (doctorId == null || doctorId!.isEmpty) {
-        if (!mounted) return;
-
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const DoctorOnboardingErrorScreen(),
-          ),
-          (_) => false,
-        );
-        return; // ⛔ نوقف تحميل HomeScreen
-      }
-      // ✅ ✅ ✅ نهاية الـ guard
-
-      final doctorSnap = await FirebaseFirestore.instance
-          .collection('doctors')
-          .doc(doctorId!)
+    try {
+      // 1️⃣ جلب user document (Source of Truth)
+      final userSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
           .get();
-      doctorName = doctorSnap.data()?['name'];
-    } else {
-      patientName = data['name'];
-    }
 
-    if (mounted) setState(() => loading = false);
+      final data = userSnap.data();
+      if (data == null) {
+        throw Exception('User document not found');
+      }
+
+      isDoctor = (data['role'] ?? '') == 'doctor';
+
+      // =====================================
+      // ✅ GUARD 1: فحص الاشتراك للطبيب فقط
+      // =====================================
+      if (isDoctor) {
+        final bool subscriptionActive = data['subscriptionActive'] == true;
+
+        final Timestamp? subEndTs = data['subscriptionEnd'] as Timestamp?;
+
+        final bool isSubscriptionValid =
+            subscriptionActive &&
+            subEndTs != null &&
+            subEndTs.toDate().isAfter(DateTime.now().toUtc());
+
+        // ❌ الاشتراك منتهي أو غير مفعل
+        if (!isSubscriptionValid) {
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const DoctorSubscriptionExpiredScreen(),
+            ),
+          );
+          return; // ⛔ نمنع الدخول لبقية HomeScreen
+        }
+      }
+
+      // =====================================
+      // ✅ GUARD 2: التحقق من doctorId
+      // =====================================
+      if (isDoctor) {
+        doctorId = await _doctorService.getDoctorId();
+
+        if (doctorId == null || doctorId!.isEmpty) {
+          if (!mounted) return;
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const DoctorOnboardingErrorScreen(),
+            ),
+            (_) => false,
+          );
+          return;
+        }
+
+        // اسم الطبيب (لرسالة الترحيب)
+        final doctorSnap = await FirebaseFirestore.instance
+            .collection('doctors')
+            .doc(doctorId!)
+            .get();
+
+        doctorName = doctorSnap.data()?['name'];
+      } else {
+        // مريض
+        patientName = data['name'];
+      }
+    } catch (e) {
+      debugPrint('❌ HomeScreen init failed: $e');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   Future<void> _logout() async {

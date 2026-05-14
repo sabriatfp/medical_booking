@@ -82,24 +82,44 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     try {
+      // 1️⃣ إنشاء حساب Auth
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email.text.trim(),
         password: password.text,
       );
 
-      // اختياري — بدون أي تحقق لاحق
       await cred.user!.sendEmailVerification();
 
       final uid = cred.user!.uid;
       final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
 
-      // users collection
-      await usersRef.set({
+      final now = DateTime.now().toUtc();
+
+      // 2️⃣ إنشاء users/{uid}
+      final Map<String, dynamic> userData = {
         'name': name.text.trim(),
         'email': email.text.trim(),
         'role': widget.role,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // ✅ اشتراك تجريبي للطبيب فقط
+      if (widget.role == 'doctor') {
+        userData.addAll({
+          'subscriptionActive': true,
+          'subscriptionType': 'trial',
+          'subscriptionStart': Timestamp.fromDate(now),
+          'subscriptionEnd': Timestamp.fromDate(
+            now.add(const Duration(days: 30)),
+          ),
+          'subscriptionUpdatedAt': FieldValue.serverTimestamp(),
+          'subscriptionUpdatedBy': 'system',
+        });
+      }
+
+      await usersRef.set(userData);
+
+      // 3️⃣ إنشاء patient (إن وُجد)
       if (widget.role == 'patient') {
         await FirebaseFirestore.instance.collection('patients').doc(uid).set({
           'phone': phone.text.trim(),
@@ -108,6 +128,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
+
+      // 4️⃣ إنشاء doctor + ربط doctorId
       if (widget.role == 'doctor') {
         final lang = Localizations.localeOf(context).languageCode;
 
@@ -126,7 +148,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             (specDoc.data() as Map<String, dynamic>)['name_$lang'] ??
             (specDoc.data() as Map<String, dynamic>)['name_fr'];
 
-        // ✅ 1️⃣ إنشاء doctorId صريح
         final doctorRef = FirebaseFirestore.instance
             .collection('doctors')
             .doc();
@@ -135,35 +156,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
           'ownerUid': uid,
           'name': name.text.trim(),
           'email': email.text.trim(),
-
           'specialtyId': selectedSpecialtyId,
           'specialtyLabel': specialtyLabel,
-
           'governorateId': selectedGovernorateId,
           'governorateLabel': governorateLabel,
-
           'phone': phone.text.trim(),
           'address': address.text.trim(),
-
           'price': null,
           'rating': 0,
           'photoUrl': '',
           'isAvailable': true,
-
           'createdAt': FieldValue.serverTimestamp(),
         });
 
-        // ✅ 2️⃣ ربط user بالـ doctorId (الحل الجذري)
-        try {
-          await usersRef.set({
-            'doctorId': doctorRef.id,
-          }, SetOptions(merge: true));
+        // ✅ ربط doctorId في users
+        await usersRef.update({'doctorId': doctorRef.id});
 
-          debugPrint("✅ doctorId saved successfully");
-        } catch (e) {
-          debugPrint("❌ FAILED to save doctorId: $e");
-          rethrow;
-        }
+        debugPrint("✅ Doctor created with trial subscription (30 days)");
       }
 
       if (!mounted) return;

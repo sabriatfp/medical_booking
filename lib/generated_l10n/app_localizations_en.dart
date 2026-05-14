@@ -12,6 +12,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Medical Booking';
 
   @override
+  String get failedToLoadUserData => 'Failed to load user data';
+
+  @override
+  String get invalidUserRole => 'Invalid account, please sign in again';
+
+  @override
   String get scheduleSettings => 'Schedule Settings';
 
   @override
@@ -60,6 +66,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSaved => 'Settings saved successfully';
 
   @override
+  String get userNotFound => 'No account found with this email address';
+
+  @override
+  String get wrongPassword => 'Incorrect password';
+
+  @override
+  String get userDisabled => 'This account has been disabled';
+
+  @override
+  String get tooManyRequests => 'Too many attempts. Please try again later';
+
+  @override
   String get from => 'From';
 
   @override
@@ -79,6 +97,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get saveChanges => 'Save Changes';
+
+  @override
+  String get subscriptionExpiredMessage =>
+      'Your subscription has expired. You cannot use the application services until it is renewed.';
+
+  @override
+  String get subscriptionEndedAt => 'Subscription end date';
+
+  @override
+  String get contactAdministration => 'Contact administration';
+
+  @override
+  String get contactAdminHint =>
+      'Please contact the administration to renew your subscription';
+
+  @override
+  String get resetFilters => 'Reset filters';
 
   @override
   String get doctorCalendar => 'Doctor Calendar';
@@ -209,6 +244,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteDayOff => 'Delete Day Off';
+
+  @override
+  String get tapToChoose => 'Tap to choose';
 
   @override
   String get doctorDashboard => 'Doctor Dashboard';
@@ -638,6 +676,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noResults => 'No results';
 
   @override
+  String get cannotConfirmPastAppointment =>
+      'Cannot confirm an appointment on a past date';
+
+  @override
   String get reportMarkedProcessed => 'Report marked as processed';
 
   @override
@@ -1012,9 +1054,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get secretaryCodeExample => 'Example: ABC123';
 
   @override
-  String get failedToLoadUserData => 'Failed to load user data';
-
-  @override
   String get searchReports => 'Search reports';
 
   @override
@@ -1170,4 +1209,132 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get currentPasswordIncorrect => 'Current password is incorrect';
+
+  @override
+  String get subscriptionRequests => 'Subscription requests';
+
+  @override
+  String get noSubscriptionRequests => 'No requests at the moment';
+
+  @override
+  String get requestDate => 'Request date';
+
+  @override
+  String get unknownDoctor => 'Unknown doctor';
+
+  @override
+  String get reject => 'Reject';
+
+  @override
+  String get subscriptionRequestsSubtitle =>
+      'Subscription renewal requests from doctors';
+
+  @override
+  String get requestSubscriptionRenewal => 'Request subscription renewal';
+
+  @override
+  String get subscriptionRequestSent => 'Subscription renewal request sent';
+
+  @override
+  String get subscriptionRequestAlreadySent =>
+      'A renewal request has already been sent';
+
+  @override
+  String get noCodes => 'No codes available';
+
+  @override
+  String get optionalExpiryDate => 'Add expiry date (optional)';
+
+  @override
+  String get chooseDate => 'Choose date';
+
+  @override
+  String get expiresOn => 'Expires on';
+
+  @override
+  String get codeNotValid => 'Invalid code';
+
+  @override
+  String get confirmDelete => 'Confirm deletion?';
+
+  @override
+  String get invalidCodeFormat => 'Invalid code format';
+
+  @override
+  String get copy => 'Copy';
+
+  @override
+  String get enterSecretaryCode =>
+      'Enter the secretary code provided by the doctor';
+
+  @override
+  String get usedBy => 'Used by';
+
+  @override
+  String get monday => 'Monday';
+
+  @override
+  String get tuesday => 'Tuesday';
+
+  @override
+  String get wednesday => 'Wednesday';
+
+  @override
+  String get thursday => 'Thursday';
+
+  @override
+  String get friday => 'Friday';
+
+  @override
+  String get saturday => 'Saturday';
+
+  @override
+  String get sunday => 'Sunday';
+
+  @override
+  String get acceptBookings => 'Accept bookings';
+
+  @override
+  String get acceptBookingsOn =>
+      'The doctor is visible and accepting new bookings';
+
+  @override
+  String get acceptBookingsOff => 'The doctor is currently unavailable';
+
+  @override
+  String get bookingsEnabled => 'Bookings have been enabled';
+
+  @override
+  String get bookingsDisabled => 'Bookings have been disabled';
+
+  @override
+  String get savePrice => 'Save price';
+
+  @override
+  String get saving => 'Saving...';
+
+  @override
+  String get priceSavedSuccessfully => 'Price saved successfully';
+
+  @override
+  String get invalidPrice => 'Please enter a valid price';
+
+  @override
+  String get confirmCancelAppointment =>
+      'Are you sure you want to cancel this appointment?';
+
+  @override
+  String get yesCancel => 'Yes, cancel';
+
+  @override
+  String get no => 'Back';
+
+  @override
+  String get enterPaidAmount => 'Enter paid amount';
+
+  @override
+  String get amountHint => 'Amount';
+
+  @override
+  String get currency => 'TND';
 }

@@ -1,9 +1,9 @@
 // lib/features/auth/ui/splash_wrapper.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:async';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
 
 // Screens
@@ -24,95 +24,87 @@ class _SplashWrapperState extends State<SplashWrapper> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // ✅ نضمن تشغيلها مرة واحدة فقط بعد جاهزية context
     if (!_initialized) {
       _initialized = true;
       _bootRoute();
     }
   }
 
-  /// قراءة users/{uid} مع مهلة
+  /// ✅ قراءة userDoc مع fallback للـ cache
   Future<Map<String, dynamic>?> _safeGetUserDoc(String uid) async {
     try {
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .get()
-          .timeout(const Duration(seconds: 8)); // ⏱️ قللنا المهلة
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 8));
 
-      debugPrint("✅ USER DOC EXISTS? ${snap.exists}");
       return snap.data();
-    } on TimeoutException catch (_) {
-      debugPrint('⌛ safeGetUserDoc TIMEOUT for $uid');
-      return null;
-    } catch (e, st) {
-      debugPrint("❌ safeGetUserDoc ERROR → $e\n$st");
+    } on TimeoutException {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get(const GetOptions(source: Source.cache));
+
+        return snap.data();
+      } catch (_) {
+        return null;
+      }
+    } catch (_) {
       return null;
     }
   }
 
-  /// تنقّل آمن بعد أول build
   void _go(Widget page) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => page),
-        (route) => false,
+        (_) => false,
       );
     });
   }
 
   void _goLogin() => _go(const LoginScreen());
-  void _goDoctor() => _go(const HomeScreen());
-  void _goPatient() => _go(const HomeScreen());
-
-  /// مؤقتًا
-  void _goSecretary() => _go(const LoginScreen());
-  void _goAdmin() => _go(const LoginScreen());
+  void _goHome() => _go(const HomeScreen());
 
   Future<void> _bootRoute() async {
     final t = AppLocalizations.of(context)!;
 
-    debugPrint("🚀 BOOT START");
-
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      debugPrint("➡️ NAV → Login (no user)");
       _goLogin();
       return;
     }
 
-    debugPrint("👤 currentUser = ${user.uid}");
+    await user.reload();
 
-    final data = await _safeGetUserDoc(user.uid);
-    debugPrint("📄 userDoc = $data");
+    Map<String, dynamic>? data = await _safeGetUserDoc(user.uid);
 
-    // ⚠️ لو فشل تحميل البيانات
     if (data == null) {
-      _showSnack(t.failedToLoadUserData);
-      debugPrint("➡️ NAV → Login (userDoc null)");
+      await Future.delayed(const Duration(milliseconds: 600));
+      data = await _safeGetUserDoc(user.uid);
+
+      if (data == null) {
+        _showSnack(t.failedToLoadUserData);
+        await Future.delayed(const Duration(milliseconds: 800));
+        _goLogin();
+        return;
+      }
+    }
+
+    final role = (data['role'] ?? '').toString();
+    if (role.isEmpty) {
+      _showSnack(t.invalidUserRole);
+      await Future.delayed(const Duration(milliseconds: 800));
       _goLogin();
       return;
     }
 
-    final role = (data['role'] ?? "").toString();
-    debugPrint("🧭 ROLE = $role");
-
-    // ✅ التوجيه حسب الدور
-    if (role == "admin") {
-      debugPrint("➡️ NAV → Admin");
-      _goAdmin();
-    } else if (role == "secretary") {
-      debugPrint("➡️ NAV → Secretary");
-      _goSecretary();
-    } else if (role == "doctor") {
-      debugPrint("➡️ NAV → Doctor → HomeScreen");
-      _goDoctor();
-    } else {
-      debugPrint("➡️ NAV → Patient/Unknown → HomeScreen");
-      _goPatient();
-    }
+    // ✅ التوجيه بسيط: الجميع إلى Home
+    _goHome();
   }
 
   void _showSnack(String msg) {

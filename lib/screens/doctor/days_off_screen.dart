@@ -184,7 +184,7 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
         .get();
 
     for (final s in slotsSnap.docs) {
-      batch.update(s.reference, {"taken": false});
+      batch.delete(s.reference);
     }
 
     await batch.commit();
@@ -227,14 +227,75 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
         child: Column(
           children: [
             // ✅ اختيار فترة الغياب
-            TextButton.icon(
-              onPressed: _pickDateRange,
-              icon: const Icon(Icons.date_range),
-              label: Text(
-                _startDate == null
-                    ? t.pickDaysOffRange
-                    : "${t.from} ${_startDate!.day}/${_startDate!.month} "
-                          "${t.to} ${_endDate!.day}/${_endDate!.month}",
+            GestureDetector(
+              onTap: _pickDateRange,
+              child: Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.4),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 18,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          _startDate == null
+                              ? Icons.event_busy
+                              : Icons.event_available,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              t.pickDaysOffRange,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _startDate == null
+                                  ? t.tapToChoose
+                                  : "${t.from} ${_startDate!.day}/${_startDate!.month} "
+                                        "${t.to} ${_endDate!.day}/${_endDate!.month}",
+                              style: TextStyle(
+                                color: _startDate == null
+                                    ? Colors.grey.shade600
+                                    : Theme.of(context).colorScheme.primary,
+                                fontSize: 13,
+                                fontWeight: _startDate == null
+                                    ? FontWeight.normal
+                                    : FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                ),
               ),
             ),
 
@@ -253,7 +314,9 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _saveDaysOff,
+                onPressed: (_startDate == null || _endDate == null)
+                    ? null
+                    : _saveDaysOff,
                 child: Text(t.save),
               ),
             ),

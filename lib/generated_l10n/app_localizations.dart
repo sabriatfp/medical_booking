@@ -106,6 +106,18 @@ abstract class AppLocalizations {
   /// **'Medical Booking'**
   String get appTitle;
 
+  /// No description provided for @failedToLoadUserData.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعذر تحميل بيانات المستخدم'**
+  String get failedToLoadUserData;
+
+  /// No description provided for @invalidUserRole.
+  ///
+  /// In ar, this message translates to:
+  /// **'حساب غير صالح، يرجى تسجيل الدخول من جديد'**
+  String get invalidUserRole;
+
   /// No description provided for @scheduleSettings.
   ///
   /// In ar, this message translates to:
@@ -190,6 +202,30 @@ abstract class AppLocalizations {
   /// **'تم حفظ الإعدادات بنجاح'**
   String get settingsSaved;
 
+  /// No description provided for @userNotFound.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا يوجد حساب بهذا البريد الإلكتروني'**
+  String get userNotFound;
+
+  /// No description provided for @wrongPassword.
+  ///
+  /// In ar, this message translates to:
+  /// **'كلمة المرور غير صحيحة'**
+  String get wrongPassword;
+
+  /// No description provided for @userDisabled.
+  ///
+  /// In ar, this message translates to:
+  /// **'هذا الحساب معطّل'**
+  String get userDisabled;
+
+  /// No description provided for @tooManyRequests.
+  ///
+  /// In ar, this message translates to:
+  /// **'محاولات كثيرة، حاول لاحقًا'**
+  String get tooManyRequests;
+
   /// No description provided for @from.
   ///
   /// In ar, this message translates to:
@@ -231,6 +267,36 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'حفظ التغييرات'**
   String get saveChanges;
+
+  /// No description provided for @subscriptionExpiredMessage.
+  ///
+  /// In ar, this message translates to:
+  /// **'لقد انتهت مدة اشتراكك. لا يمكنك استخدام خدمات التطبيق حتى يتم تجديد الاشتراك.'**
+  String get subscriptionExpiredMessage;
+
+  /// No description provided for @subscriptionEndedAt.
+  ///
+  /// In ar, this message translates to:
+  /// **'تاريخ انتهاء الاشتراك'**
+  String get subscriptionEndedAt;
+
+  /// No description provided for @contactAdministration.
+  ///
+  /// In ar, this message translates to:
+  /// **'التواصل مع الإدارة'**
+  String get contactAdministration;
+
+  /// No description provided for @contactAdminHint.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى التواصل مع إدارة التطبيق لتجديد الاشتراك'**
+  String get contactAdminHint;
+
+  /// No description provided for @resetFilters.
+  ///
+  /// In ar, this message translates to:
+  /// **'إعادة تحيين الفلاتر'**
+  String get resetFilters;
 
   /// No description provided for @doctorCalendar.
   ///
@@ -391,7 +457,7 @@ abstract class AppLocalizations {
   /// No description provided for @subscriptionExpired.
   ///
   /// In ar, this message translates to:
-  /// **'اشتراك الطبيب منتهي'**
+  /// **'منتهي'**
   String get subscriptionExpired;
 
   /// No description provided for @subscriptionEndsAt.
@@ -483,6 +549,12 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'حذف يوم الغياب'**
   String get deleteDayOff;
+
+  /// No description provided for @tapToChoose.
+  ///
+  /// In ar, this message translates to:
+  /// **'اضغط للاختيار'**
+  String get tapToChoose;
 
   /// No description provided for @doctorDashboard.
   ///
@@ -1330,6 +1402,12 @@ abstract class AppLocalizations {
   /// **'لا توجد نتائج'**
   String get noResults;
 
+  /// No description provided for @cannotConfirmPastAppointment.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا يمكن تأكيد موعد في تاريخ سابق'**
+  String get cannotConfirmPastAppointment;
+
   /// No description provided for @reportMarkedProcessed.
   ///
   /// In ar, this message translates to:
@@ -2074,12 +2152,6 @@ abstract class AppLocalizations {
   /// **'مثال: ABC123'**
   String get secretaryCodeExample;
 
-  /// No description provided for @failedToLoadUserData.
-  ///
-  /// In ar, this message translates to:
-  /// **'فشل تحميل بيانات المستخدم'**
-  String get failedToLoadUserData;
-
   /// No description provided for @searchReports.
   ///
   /// In ar, this message translates to:
@@ -2391,6 +2463,252 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'كلمة المرور الحالية غير صحيحة'**
   String get currentPasswordIncorrect;
+
+  /// No description provided for @subscriptionRequests.
+  ///
+  /// In ar, this message translates to:
+  /// **'طلبات تجديد الاشتراك'**
+  String get subscriptionRequests;
+
+  /// No description provided for @noSubscriptionRequests.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد طلبات حالياً'**
+  String get noSubscriptionRequests;
+
+  /// No description provided for @requestDate.
+  ///
+  /// In ar, this message translates to:
+  /// **'تاريخ الطلب'**
+  String get requestDate;
+
+  /// No description provided for @unknownDoctor.
+  ///
+  /// In ar, this message translates to:
+  /// **'طبيب غير معروف'**
+  String get unknownDoctor;
+
+  /// No description provided for @reject.
+  ///
+  /// In ar, this message translates to:
+  /// **'رفض'**
+  String get reject;
+
+  /// No description provided for @subscriptionRequestsSubtitle.
+  ///
+  /// In ar, this message translates to:
+  /// **'طلبات تجديد الاشتراك المرسلة من الأطباء'**
+  String get subscriptionRequestsSubtitle;
+
+  /// No description provided for @requestSubscriptionRenewal.
+  ///
+  /// In ar, this message translates to:
+  /// **'طلب تجديد الاشتراك'**
+  String get requestSubscriptionRenewal;
+
+  /// No description provided for @subscriptionRequestSent.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم إرسال طلب تجديد الاشتراك، سيتم التواصل معك قريبًا'**
+  String get subscriptionRequestSent;
+
+  /// No description provided for @subscriptionRequestAlreadySent.
+  ///
+  /// In ar, this message translates to:
+  /// **'لقد أرسلت طلب تجديد من قبل، يرجى انتظار رد الإدارة'**
+  String get subscriptionRequestAlreadySent;
+
+  /// No description provided for @noCodes.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد أكواد'**
+  String get noCodes;
+
+  /// No description provided for @optionalExpiryDate.
+  ///
+  /// In ar, this message translates to:
+  /// **'إضافة تاريخ انتهاء (اختياري)'**
+  String get optionalExpiryDate;
+
+  /// No description provided for @chooseDate.
+  ///
+  /// In ar, this message translates to:
+  /// **'اختيار تاريخ'**
+  String get chooseDate;
+
+  /// No description provided for @expiresOn.
+  ///
+  /// In ar, this message translates to:
+  /// **'ينتهي في'**
+  String get expiresOn;
+
+  /// No description provided for @codeNotValid.
+  ///
+  /// In ar, this message translates to:
+  /// **'الكود غير صحيح'**
+  String get codeNotValid;
+
+  /// No description provided for @confirmDelete.
+  ///
+  /// In ar, this message translates to:
+  /// **'هل أنت متأكد من الحذف؟'**
+  String get confirmDelete;
+
+  /// No description provided for @invalidCodeFormat.
+  ///
+  /// In ar, this message translates to:
+  /// **'صيغة الكود غير صحيحة'**
+  String get invalidCodeFormat;
+
+  /// No description provided for @copy.
+  ///
+  /// In ar, this message translates to:
+  /// **'نسخ'**
+  String get copy;
+
+  /// No description provided for @enterSecretaryCode.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدخل كود السكرتير الذي زوّدك به الطبيب'**
+  String get enterSecretaryCode;
+
+  /// No description provided for @usedBy.
+  ///
+  /// In ar, this message translates to:
+  /// **'استُعمل من قبل'**
+  String get usedBy;
+
+  /// No description provided for @monday.
+  ///
+  /// In ar, this message translates to:
+  /// **'الإثنين'**
+  String get monday;
+
+  /// No description provided for @tuesday.
+  ///
+  /// In ar, this message translates to:
+  /// **'الثلاثاء'**
+  String get tuesday;
+
+  /// No description provided for @wednesday.
+  ///
+  /// In ar, this message translates to:
+  /// **'الأربعاء'**
+  String get wednesday;
+
+  /// No description provided for @thursday.
+  ///
+  /// In ar, this message translates to:
+  /// **'الخميس'**
+  String get thursday;
+
+  /// No description provided for @friday.
+  ///
+  /// In ar, this message translates to:
+  /// **'الجمعة'**
+  String get friday;
+
+  /// No description provided for @saturday.
+  ///
+  /// In ar, this message translates to:
+  /// **'السبت'**
+  String get saturday;
+
+  /// No description provided for @sunday.
+  ///
+  /// In ar, this message translates to:
+  /// **'الأحد'**
+  String get sunday;
+
+  /// No description provided for @acceptBookings.
+  ///
+  /// In ar, this message translates to:
+  /// **'استقبال الحجوزات'**
+  String get acceptBookings;
+
+  /// No description provided for @acceptBookingsOn.
+  ///
+  /// In ar, this message translates to:
+  /// **'الطبيب ظاهر ويقبل حجوزات جديدة'**
+  String get acceptBookingsOn;
+
+  /// No description provided for @acceptBookingsOff.
+  ///
+  /// In ar, this message translates to:
+  /// **'الطبيب غير متاح حاليًا'**
+  String get acceptBookingsOff;
+
+  /// No description provided for @bookingsEnabled.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم تفعيل استقبال الحجوزات'**
+  String get bookingsEnabled;
+
+  /// No description provided for @bookingsDisabled.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم إيقاف استقبال الحجوزات'**
+  String get bookingsDisabled;
+
+  /// No description provided for @savePrice.
+  ///
+  /// In ar, this message translates to:
+  /// **'حفظ السعر'**
+  String get savePrice;
+
+  /// No description provided for @saving.
+  ///
+  /// In ar, this message translates to:
+  /// **'جاري الحفظ...'**
+  String get saving;
+
+  /// No description provided for @priceSavedSuccessfully.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم حفظ السعر بنجاح'**
+  String get priceSavedSuccessfully;
+
+  /// No description provided for @invalidPrice.
+  ///
+  /// In ar, this message translates to:
+  /// **'الرجاء إدخال سعر صحيح'**
+  String get invalidPrice;
+
+  /// No description provided for @confirmCancelAppointment.
+  ///
+  /// In ar, this message translates to:
+  /// **'هل أنت متأكد من إلغاء هذا الموعد؟'**
+  String get confirmCancelAppointment;
+
+  /// No description provided for @yesCancel.
+  ///
+  /// In ar, this message translates to:
+  /// **'نعم، إلغاء'**
+  String get yesCancel;
+
+  /// No description provided for @no.
+  ///
+  /// In ar, this message translates to:
+  /// **'تراجع'**
+  String get no;
+
+  /// No description provided for @enterPaidAmount.
+  ///
+  /// In ar, this message translates to:
+  /// **'إدخال المبلغ المدفوع'**
+  String get enterPaidAmount;
+
+  /// No description provided for @amountHint.
+  ///
+  /// In ar, this message translates to:
+  /// **'المبلغ'**
+  String get amountHint;
+
+  /// No description provided for @currency.
+  ///
+  /// In ar, this message translates to:
+  /// **'دت'**
+  String get currency;
 }
 
 class _AppLocalizationsDelegate

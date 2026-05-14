@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // شاشات السكريتير/الطبيب
 import 'package:medical_booking/features/secretary/ui/appointments_today_screen.dart';
@@ -85,6 +86,42 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
     return true;
   }
 
+  Future<void> _logoutSecretary(BuildContext context) async {
+    final auth = FirebaseAuth.instance;
+    final user = auth.currentUser;
+
+    if (user == null) return;
+
+    final db = FirebaseFirestore.instance;
+
+    // 1️⃣ سحب صلاحيات السكريتير (الأهم)
+    await db.collection('users').doc(user.uid).update({
+      'activeSecretaryDoctorId': FieldValue.delete(),
+    });
+
+    // 2️⃣ إغلاق session النشطة (اختياري لكنه ممتاز)
+    final sessions = await db
+        .collection('secretary_sessions')
+        .where('secretaryUid', isEqualTo: user.uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+
+    if (sessions.docs.isNotEmpty) {
+      await sessions.docs.first.reference.update({
+        'status': 'closed',
+        'endedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // 3️⃣ Logout من Firebase Auth
+    await auth.signOut();
+
+    // 4️⃣ الرجوع لشاشة Login
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
@@ -113,12 +150,7 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
                 icon: const Icon(Icons.logout, color: Colors.white),
                 tooltip: t.logout,
                 onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
-                  if (context.mounted) {
-                    Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/login', (_) => false);
-                  }
+                  await _logoutSecretary(context);
                 },
               ),
             ],

@@ -1,6 +1,7 @@
 {
   "appTitle": "Medical Booking",
-
+  "failedToLoadUserData": "تعذر تحميل بيانات المستخدم",
+  "invalidUserRole": "حساب غير صالح، يرجى تسجيل الدخول من جديد",
   "scheduleSettings": "إعدادات التوقيت",
   "slotDurationTitle": "مدة الفحص الطبي",
   "slotDurationNotSet": "لم يتم تحديد مدة الفحص بعد",
@@ -15,16 +16,22 @@
   "weekLabel": "الأسبوع {index}",
   "saveSettings": "حفظ الإعدادات",
   "settingsSaved": "تم حفظ الإعدادات بنجاح",
-
+  "userNotFound": "لا يوجد حساب بهذا البريد الإلكتروني",
+  "wrongPassword": "كلمة المرور غير صحيحة",
+  "userDisabled": "هذا الحساب معطّل",
+  "tooManyRequests": "محاولات كثيرة، حاول لاحقًا",
   "from": "من",
   "to": "إلى",
   "selectTime": "اختيار الوقت",
-
   "doctorSettings": "إعدادات الطبيب",
   "doctorFileNotFound": "ملف الطبيب غير موجود",
   "loadSettingsFailed": "تعذر تحميل الإعدادات",
   "saveChanges": "حفظ التغييرات",
-
+  "subscriptionExpiredMessage": "لقد انتهت مدة اشتراكك. لا يمكنك استخدام خدمات التطبيق حتى يتم تجديد الاشتراك.",
+  "subscriptionEndedAt": "تاريخ انتهاء الاشتراك",
+  "contactAdministration": "التواصل مع الإدارة",
+  "contactAdminHint": "يرجى التواصل مع إدارة التطبيق لتجديد الاشتراك",
+  "resetFilters": "إعادة تحيين الفلاتر",
   "doctorCalendar": "تقويم الطبيب",
   "appointments": "المواعيد",
   "confirmedAppointments": "المؤكدة",
@@ -60,7 +67,6 @@
   "remainingDays": "متبقي {days} يوم",
   "lastUpdate": "آخر تحديث",
   "comingSoon": "سيتم إضافة بوابة الدفع قريبًا",
-
   "daysOff": "أيام الغياب",
   "pickDaysOffRange": "اختيار فترة الغياب",
   "reasonOptional": "سبب الغياب (اختياري)",
@@ -70,7 +76,7 @@
   "errorLoadingData": "خطأ في تحميل البيانات",
   "noDaysOff": "لا توجد أيام غياب",
   "deleteDayOff": "حذف يوم الغياب",
-
+  "tapToChoose": "اضغط للاختيار",
   "doctorDashboard": "لوحة الطبيب",
   "doctorNotLinked": "لم يتم ربط الحساب بطبيب",
   "errorResolvingDoctor": "تعذر استرجاع بيانات الطبيب",
@@ -230,7 +236,7 @@
   "activatedUntil": "مفعل حتى",
   "refresh": "تحديث",
   "noResults": "لا توجد نتائج",
-
+"cannotConfirmPastAppointment": "لا يمكن تأكيد موعد في تاريخ سابق",
   "reportMarkedProcessed": "تم تعليم البلاغ كمُعالج",
   "reportMarkedNew": "تم تعليم البلاغ كجديد",
   "type": "النوع",
@@ -356,7 +362,6 @@
 "secretaryEnterCodeText": "أدخل رمز السكرتير",
 "secretaryCode": "رمز السكرتير",
 "secretaryCodeExample": "مثال: ABC123",
-"failedToLoadUserData": "فشل تحميل بيانات المستخدم",
 "searchReports": "بحث في البلاغات",
 "uidUnavailable": "المعرف غير متاح",
 "noAccess": "لا تملك صلاحية الدخول",
@@ -402,14 +407,62 @@
   "doctorPrefix": "د.",
  "bookAppointment": "احجز موعد",
   "doctorNotAvailable": "الطبيب غير متاح حاليًا",
-  "subscriptionExpired": "اشتراك الطبيب منتهي",
   "currentPasswordRequired": "يرجى إدخال كلمة المرور الحالية لتأكيد تغيير البريد الإلكتروني",
 "currentPassword": "كلمة المرور الحالية",
   "newPassword": "كلمة المرور الجديدة",
   "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
   "passwordsDoNotMatch": "كلمتا المرور غير متطابقتين",
   "passwordTooShort": "كلمة المرور ضعيفة جدًا",
-  "currentPasswordIncorrect": "كلمة المرور الحالية غير صحيحة"
+  "currentPasswordIncorrect": "كلمة المرور الحالية غير صحيحة",
+  "subscriptionRequests": "طلبات تجديد الاشتراك",
+  "noSubscriptionRequests": "لا توجد طلبات حالياً",
+  "requestDate": "تاريخ الطلب",
+  "unknownDoctor": "طبيب غير معروف",
+  "reject": "رفض",
+  "subscriptionRequestsSubtitle": "طلبات تجديد الاشتراك المرسلة من الأطباء",
+   "requestSubscriptionRenewal": "طلب تجديد الاشتراك",
+  "subscriptionRequestSent": "تم إرسال طلب تجديد الاشتراك، سيتم التواصل معك قريبًا",
+  "subscriptionRequestAlreadySent": "لقد أرسلت طلب تجديد من قبل، يرجى انتظار رد الإدارة",
+  "noCodes": "لا توجد أكواد",
+  "optionalExpiryDate": "إضافة تاريخ انتهاء (اختياري)",
+  "chooseDate": "اختيار تاريخ",
+  "expiresOn": "ينتهي في",
+  "codeNotValid": "الكود غير صحيح",
+  "confirmDelete": "هل أنت متأكد من الحذف؟",
+  "invalidCodeFormat": "صيغة الكود غير صحيحة",
+  "copy": "نسخ",
+  "enterSecretaryCode": "أدخل كود السكرتير الذي زوّدك به الطبيب",
+  "usedBy": "استُعمل من قبل",
+  "monday": "الإثنين",
+  "tuesday": "الثلاثاء",
+  "wednesday": "الأربعاء",
+  "thursday": "الخميس",
+  "friday": "الجمعة",
+  "saturday": "السبت",
+  "sunday": "الأحد",
+  "acceptBookings": "استقبال الحجوزات",
+  "acceptBookingsOn": "الطبيب ظاهر ويقبل حجوزات جديدة",
+  "acceptBookingsOff": "الطبيب غير متاح حاليًا",
+  "bookingsEnabled": "تم تفعيل استقبال الحجوزات",
+  "bookingsDisabled": "تم إيقاف استقبال الحجوزات",
+    "savePrice": "حفظ السعر",
+  "saving": "جاري الحفظ...",
+  "priceSavedSuccessfully": "تم حفظ السعر بنجاح",
+  "invalidPrice": "الرجاء إدخال سعر صحيح",
+ "confirmCancelAppointment": "هل أنت متأكد من إلغاء هذا الموعد؟",
+  "yesCancel": "نعم، إلغاء",
+  "no": "تراجع",  
+ "enterPaidAmount": "إدخال المبلغ المدفوع",
+  "amountHint": "المبلغ",
+  "currency": "دت"
+
+
+
 
 
 }
+
+
+
+
+

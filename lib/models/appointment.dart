@@ -1,6 +1,7 @@
 class Appointment {
   final String id;
-  final String userId;
+
+  final String patientId; // ✅ بدل userId
   final String doctorId;
   final DateTime dateTime;
   final String status; // pending, confirmed, canceled
@@ -8,7 +9,7 @@ class Appointment {
 
   Appointment({
     required this.id,
-    required this.userId,
+    required this.patientId,
     required this.doctorId,
     required this.dateTime,
     required this.status,
@@ -17,7 +18,7 @@ class Appointment {
 
   Map<String, dynamic> toMap() {
     return {
-      'userId': userId,
+      'patientId': patientId,
       'doctorId': doctorId,
       'dateTime': dateTime.toUtc(), // نحفظها UTC لتفادي مشاكل التوقيت
       'status': status,
@@ -38,7 +39,7 @@ class Appointment {
 
     return Appointment(
       id: id,
-      userId: data['userId'] ?? '',
+      patientId: data['userId'] ?? '',
       doctorId: data['doctorId'] ?? '',
       dateTime: dt.toLocal(),
       status: data['status'] ?? 'pending',

@@ -1,6 +1,5 @@
 {
   "appTitle": "Medical Booking",
-
   "scheduleSettings": "Paramètres d'horaire",
   "slotDurationTitle": "Durée de consultation",
   "slotDurationNotSet": "Durée non définie",
@@ -15,16 +14,14 @@
   "weekLabel": "Semaine {index}",
   "saveSettings": "Enregistrer les paramètres",
   "settingsSaved": "Paramètres enregistrés avec succès",
-
+  "invalidUserRole": "Compte non valide, veuillez vous reconnecter",
   "from": "De",
   "to": "À",
   "selectTime": "Sélectionner l'heure",
-
   "doctorSettings": "Paramètres du médecin",
   "doctorFileNotFound": "Fichier du médecin introuvable",
   "loadSettingsFailed": "Échec de chargement des paramètres",
   "saveChanges": "Enregistrer les modifications",
-
   "doctorCalendar": "Calendrier du médecin",
   "appointments": "Rendez-vous",
   "confirmedAppointments": "Confirmés",
@@ -37,11 +34,9 @@
   "close": "Fermer",
   "prevMonth": "Mois précédent",
   "nextMonth": "Mois suivant",
-
   "doctorIdNotFound": "ID du médecin introuvable",
   "errorFindingDoctor": "Erreur lors de la récupération du médecin",
   "errorFindingDoctorId": "Impossible de trouver l'ID du médecin",
-
   "financeDashboard": "Tableau financier",
   "revenueSummary": "Résumé des revenus",
   "todayRevenue": "Revenu du jour",
@@ -53,14 +48,12 @@
   "subscriptionStatus": "Statut de l'abonnement",
   "subscriptionActive": "Actif",
   "subscriptionTrial": "Essai",
-  "subscriptionExpired": "Expiré",
   "subscriptionEndsAt": "Expire le",
   "subscriptionExpiringSoon": "Expire bientôt — renouvellement conseillé.",
   "renewSubscription": "Renouveler l'abonnement",
   "remainingDays": "{days} jours restants",
   "lastUpdate": "Dernière mise à jour",
   "comingSoon": "Bientôt disponible",
-
   "daysOff": "Jours d'absence",
   "pickDaysOffRange": "Choisir une période d’absence",
   "reasonOptional": "Raison (optionnel)",
@@ -70,7 +63,6 @@
   "errorLoadingData": "Erreur de chargement",
   "noDaysOff": "Aucun jour d’absence",
   "deleteDayOff": "Supprimer ce jour",
-
   "doctorDashboard": "Tableau du médecin",
   "doctorNotLinked": "Compte non lié à un médecin",
   "errorResolvingDoctor": "Erreur lors du chargement du médecin",
@@ -93,7 +85,6 @@
   "tryDirectRead": "Essayer lecture directe",
   "refreshTryDirect": "Actualiser / lecture directe",
   "all": "Tous",
-
   "todayAppointments": "Rendez-vous du jour",
   "loadTodayError": "Erreur lors du chargement des rendez-vous du jour",
   "noAppointmentsToday": "Aucun rendez-vous aujourd'hui",
@@ -102,7 +93,11 @@
   "checkedIn": "Présence enregistrée",
   "noShow": "Absent",
   "noShowSet": "Statut marqué : absent",
-
+  "subscriptionRequests": "Demandes de renouvellement",
+  "noSubscriptionRequests": "Aucune demande pour le moment",
+  "requestDate": "Date de la demande",
+  "unknownDoctor": "Médecin inconnu",
+  "reject": "Refuser",
   "mustLogin": "Veuillez vous connecter",
   "mustLoginFirst": "Veuillez vous connecter d'abord",
   "cannotBookThisDay": "Impossible de réserver ce jour",
@@ -113,10 +108,8 @@
   "cannotBookPastTime": "Impossible de réserver un horaire passé",
   "bookingSent": "Demande de réservation envoyée",
   "invalidSlot": "Créneau invalide",
-
   "emailInUse": "Cet email est déjà utilisé",
   "weakPassword": "Mot de passe trop faible",
-
   "registerPatient": "Inscription patient",
   "register": "S'inscrire",
   "fullName": "Nom complet",
@@ -124,26 +117,22 @@
   "enterValidPassword": "Veuillez entrer un mot de passe valide",
   "phoneNumber": "Numéro de téléphone",
   "enterValidPhone": "Veuillez entrer un numéro valide",
-
   "createAccount": "Créer un compte",
   "appBarCreateAccount": "Créer un compte",
   "chooseAccountType": "Choisissez le type de compte",
   "patientOrDoctor": "Êtes-vous patient ou médecin ?",
   "registerDoctor": "Inscription médecin",
-
   "dataLoadError": "Erreur de chargement",
   "wrongCurrentPassword": "Mot de passe actuel incorrect",
   "reauthFailed": "Échec de réauthentification",
   "noChangesToSave": "Aucune modification à enregistrer",
   "savedSuccessfully": "Enregistré avec succès",
   "saveFailed": "Échec de l'enregistrement",
-
   "patientSettings": "Paramètres du patient",
   "emailExample": "exemple@mail.com",
   "currentPassword": "Mot de passe actuel",
   "newPassword": "Nouveau mot de passe",
   "passwordTooShort": "Mot de passe trop court",
-
   "verifyBySMS": "Vérifier par SMS",
   "notificationSettings": "Paramètres de notification",
   "notificationSettingsDesc": "Gérer vos notifications",
@@ -154,14 +143,16 @@
   "codeSentSuccessfully": "Code envoyé avec succès",
   "enterSMSCode": "Entrez le code SMS",
   "verifyFailed": "Échec de vérification",
-
+  "subscriptionExpiredMessage": "Votre abonnement est expiré. Vous ne pouvez plus utiliser les services de l’application.",
+  "subscriptionEndedAt": "Date de fin de l’abonnement",
+  "contactAdministration": "Contacter l’administration",
+  "contactAdminHint": "Veuillez contacter l’administration pour renouveler votre abonnement",
   "phoneVerification": "Vérification du téléphone",
   "sending": "Envoi...",
   "sendSMSCode": "Envoyer code SMS",
   "smsCode": "Code SMS",
   "verifying": "Vérification...",
   "confirmCode": "Confirmer le code",
-
   "notificationsEnabled": "Notifications activées",
   "notificationsEnabledMessage": "Vous recevrez les notifications",
   "notificationsDisabled": "Notifications désactivées",
@@ -171,21 +162,17 @@
   "allowNotificationsDescription": "Activer les notifications",
   "sendTestNotification": "Envoyer une notification test",
   "fcmDisabledNote": "FCM désactivé sur cet appareil",
-
   "notLoggedIn": "Vous n'êtes pas connecté",
   "failedToLoadAppointments": "Échec du chargement des rendez-vous",
   "noAppointmentsYet": "Aucun rendez-vous pour le moment",
-
   "userDataNotFound": "Données utilisateur introuvables",
   "loginError": "Erreur de connexion",
-
   "language": "Langue",
   "secretaryHint": "Espace réservé au secrétaire",
   "welcomeDoctor": "Bienvenue Dr",
   "defaultDoctor": "Médecin",
   "welcomeUser": "Bienvenue",
   "defaultUser": "Utilisateur",
-
   "home": "Accueil",
   "changeLanguage": "Changer la langue",
   "patientServices": "Services aux patients",
@@ -193,10 +180,9 @@
   "dashboard": "Tableau de bord",
   "calendar": "Calendrier",
   "finance": "Finances",
-
+  "resetFilters": "Réinitialiser les filtres",
   "failedToLoadDoctors": "Échec du chargement des médecins",
   "noDoctorsAvailable": "Aucun médecin disponible",
-
   "chooseDay": "Choisir un jour",
   "noAvailableAppointments": "Aucun créneau disponible",
   "available": "Disponible",
@@ -226,7 +212,10 @@
   "activatedUntil": "Activé jusqu'au",
   "refresh": "Actualiser",
   "noResults": "Aucun résultat",
-
+  "userNotFound": "Aucun compte n’est associé à cette adresse e-mail",
+  "wrongPassword": "Mot de passe incorrect",
+  "userDisabled": "Ce compte a été désactivé",
+  "tooManyRequests": "Trop de tentatives. Veuillez réessayer plus tard",
   "reportMarkedProcessed": "Signalement marqué comme traité",
   "reportMarkedNew": "Signalement marqué comme nouveau",
   "type": "Type",
@@ -308,6 +297,9 @@
 "expiresAt": "Expire le",
 "pickDate": "Choisir la date",
 "create": "Créer",
+"codeNotValid": "Code incorrect",
+"invalidCodeFormat": "Format du code invalide",
+"enterSecretaryCode": "Entrez le code du secrétaire fourni par le médecin",
 "userNotLogged": "Utilisateur non connecté",
 "noPermissionForThisDoctor": "Aucune permission pour ce docteur",
 "expiryMustBeFuture": "La date doit être dans le futur",
@@ -399,15 +391,51 @@
  "bookAppointment": "Prendre rendez-vous",
   "doctorNotAvailable": "Le médecin n'est pas disponible actuellement",
   "subscriptionExpired": "L'abonnement du médecin est expiré",
-
-
+"subscriptionRequestsSubtitle": "Demandes de renouvellement envoyées par les médecins",
 "doctorTerms": "Engagement du médecin",
   "doctorAgreementTitle": "Engagement du médecin",
   "doctorAgreementDetails": "Déclaration et engagement relatifs au compte médecin\n\nEn utilisant cette application en tant que médecin, vous déclarez et acceptez ce qui suit :\n\n1) Vous êtes un médecin dûment autorisé à exercer et toutes les informations fournies sont exactes et à jour.\n2) Vous assumez l'entière responsabilité légale et professionnelle des informations que vous fournissez.\n3) L'application n'est pas responsable de l'exactitude des informations saisies par les médecins.\n4) L'application est destinée uniquement à la gestion des rendez-vous médicaux.\n5) Toute usurpation d'identité ou information trompeuse peut entraîner la suppression du compte et des poursuites légales.\n6) L'administration de l'application se réserve le droit de demander des documents prouvant les qualifications professionnelles si nécessaire.\n\nEn continuant, vous acceptez l'ensemble des conditions ci-dessus.",
   "doctorAgreementConfirm": "Je confirme être un médecin autorisé et assumer l'entière responsabilité de l'exactitude de mes informations.",
   "acceptAndContinue": "Continuer la création du compte",
   "mustAcceptTerms": "Veuillez accepter les conditions avant de continuer",
-  "back": "Retour"
+  "back": "Retour",
+  "requestSubscriptionRenewal": "Demander le renouvellement",
+  "subscriptionRequestSent": "La demande de renouvellement a été envoyée",
+  "subscriptionRequestAlreadySent": "Une demande de renouvellement a déjà été envoyée",
+  "noCodes": "Aucun code disponible",
+  "optionalExpiryDate": "Ajouter une date d’expiration (optionnel)",
+  "chooseDate": "Choisir une date",
+  "expiresOn": "Expire le",
+  "confirmDelete": "Confirmer la suppression ?",
+  "copy": "Copier",
+  "usedBy": "Utilisé par",
+  "monday": "Lundi",
+  "tuesday": "Mardi",
+  "wednesday": "Mercredi",
+  "thursday": "Jeudi",
+  "friday": "Vendredi",
+  "saturday": "Samedi",
+  "sunday": "Dimanche",
+"acceptBookings": "Accepter les réservations",
+  "acceptBookingsOn": "Le médecin est visible et accepte de nouvelles réservations",
+  "acceptBookingsOff": "Le médecin n'est pas disponible actuellement",
+  "bookingsEnabled": "La réception des réservations a été activée",
+  "bookingsDisabled": "La réception des réservations a été désactivée",
+  "savePrice": "Enregistrer le prix",
+  "saving": "Enregistrement en cours...",
+  "priceSavedSuccessfully": "Le prix a été enregistré avec succès",
+  "invalidPrice": "Veuillez entrer un prix valide",
+   "confirmCancelAppointment": "Êtes-vous sûr de vouloir annuler ce rendez-vous ?",
+  "yesCancel": "Oui, annuler",
+  "no": "Retour",
+   "enterPaidAmount": "Saisir le montant payé",
+  "amountHint": "Montant",
+  "currency": "DT",
+  "tapToChoose": "Appuyez pour choisir",
+  "cannotConfirmPastAppointment": "Impossible de confirmer un rendez-vous à une date passée"
+
+
+
 
   
 }

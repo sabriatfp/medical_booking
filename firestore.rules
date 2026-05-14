@@ -1,414 +1,459 @@
 rules_version = '2';
 service cloud.firestore {
-match /databases/{db}/documents {
+  match /databases/{db}/documents {
 
-/* ============================= */
-/* basic helpers                 */
-/* ============================= */
+    /* ============================= */
+    /* helpers                       */
+    /* ============================= */
 
-function isSignedIn() {
-  return request.auth != null;
-}
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-function userDoc(uid) {
-  return get(/databases/$(db)/documents/users/$(uid));
-}
+    function userDoc(uid) {
+      return get(/databases/$(db)/documents/users/$(uid));
+    }
 
-function userRole(uid) {
-  return isSignedIn() ? userDoc(uid).data.role : null;
-}
+    function userRole(uid) {
+      return isSignedIn() ? userDoc(uid).data.role : null;
+    }
 
-function isAdmin() {
-  return isSignedIn() && userRole(request.auth.uid) == 'admin';
-}
+    function isAdmin() {
+      return isSignedIn() && userRole(request.auth.uid) == 'admin';
+    }
 
-function isPatient(uid) {
-  return userRole(uid) == 'patient';
-}
+    function isOwnerDoctor(doctorId) {
+      return isSignedIn()
+        && userRole(request.auth.uid) == 'doctor'
+        && userDoc(request.auth.uid).data.doctorId == doctorId;
+    }
 
-function isOwnerDoctorDoc(doctorId) {
+    function isDoctorSubscriptionActive(uid) {
+      let u = get(/databases/$(db)/documents/users/$(uid)).data;
+      return u.subscriptionActive == true
+        && u.subscriptionEnd != null
+        && u.subscriptionEnd.toMillis() > request.time.toMillis();
+    }
+    function hasActiveSecretarySession(doctorId) {
   return isSignedIn()
-    && userRole(request.auth.uid) == 'doctor'
-    && userDoc(request.auth.uid).data.doctorId == doctorId;
+    && userDoc(request.auth.uid).data.role == 'secretary'
+    && userDoc(request.auth.uid).data.activeSecretaryDoctorId == doctorId;
 }
+    /* ============================= */
+    /* users (SOURCE OF TRUTH)       */
+    /* ============================= */
 
+    match /users/{uid} {
+
+      allow get, read: if isSignedIn()
+        && (request.auth.uid == uid || isAdmin());
+
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn()
+        && request.auth.uid == uid;
+
+      // المستخدم يعدّل بياناته فقط (ليس الاشتراك)
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'displayName',
+          'photoUrl',
+          'phone',
+          'fcmTokens',
+          'lastLoginAt'
+        ]);
+
+      // ✅ الأدمن فقط يعدّل الاشتراك / الدور
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+    }
 /* ============================= */
-/* secretary session check       */
+/* patients                      */
 /* ============================= */
 
-function hasActiveSecretarySession(doctorId) {
+match /patients/{uid} {
 
-  let path = /databases/$(db)/documents/secretary_sessions/$(request.auth.uid + "_" + doctorId);
+  // ✅ السماح بالإنشاء الأولي
+  allow create: if isSignedIn()
+    && request.auth.uid == uid
+    && (
+      // الحالة 1: role موجود فعلًا
+      userDoc(request.auth.uid).data.role == 'patient'
+      ||
+      // الحالة 2: role يُنشأ الآن في users (first-time signup)
+      !exists(/databases/$(db)/documents/patients/$(uid))
+    );
 
-  return isSignedIn()
-    && exists(path)
-    && get(path).data.active == true
-    && get(path).data.secretaryUid == request.auth.uid
-    && get(path).data.doctorId == doctorId;
+  // ✅ المريض يقرأ ويعدّل بياناته فقط
+  allow read, update: if isSignedIn()
+    && request.auth.uid == uid;
+
+  // ✅ الحذف للأدمن فقط
+  allow delete: if isAdmin();
 }
+    /* ============================= */
+    /* subscription_requests (INFO) */
+    /* ============================= */
 
-/* ============================= */
-/* users                         */
-/* ============================= */
+    match /subscription_requests/{id} {
 
-match /users/{uid} {
+      // الطبيب ينشئ فقط (إعلام)
+      allow create: if isSignedIn()
+        && userRole(request.auth.uid) == 'doctor';
 
-allow get: if isSignedIn() && (
-      request.auth.uid == uid
-      || isAdmin()
-);
+      // الأدمن يقرأ
+      allow read, update: if isAdmin();
+    }
+  /* ============================= */
+    /* secretary_public_collection  */
+    /* ============================= */   
+match /secretary_codes_public/{id} {
+  allow read: if true;
 
-allow list: if isAdmin();
+  allow create: if isSignedIn();
 
-allow create: if isSignedIn() && request.auth.uid == uid;
-
-allow update: if isSignedIn()
-  && request.auth.uid == uid
-  && request.resource.data.keys().hasOnly([
-    'displayName',
-    'photoUrl',
-    'phone',
-    'fcmTokens',
-    'lastLoginAt'
-]);
-
-allow update: if isAdmin()
-  && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-    'subscriptionActive',
-    'subscriptionPlan',
-    'subscriptionEnd',
-    'subscriptionUpdatedAt'
-]);
-
-allow delete: if isAdmin();
+  allow update, delete: if isAdmin()
+    || isOwnerDoctor(
+      get(/databases/$(db)/documents/doctors/$(resource.data.doctorId)).id
+    );
 }
+    /* ============================= */
+    /* secretary_sessions            */
+    /* ============================= */
 
-/* ============================= */
-/* secretary_sessions            */
-/* ============================= */
+ match /secretary_sessions/{id} {
 
-match /secretary_sessions/{sessionId} {
+  function codePath(doctorId, codeId) {
+    return /databases/$(db)/documents/doctors/$(doctorId)/secretary_codes/$(codeId);
+  }
 
-allow get: if isSignedIn()
-  && resource.data.secretaryUid == request.auth.uid;
+  // قراءة document واحد
+  allow get: if isSignedIn()
+    && resource.data.secretaryUid == request.auth.uid;
 
-allow list: if false;
+  // ✅ FIX: السماح بالـ query
+  allow list: if isSignedIn();
 
-allow create: if isSignedIn()
+  allow create: if isSignedIn()
   && request.resource.data.secretaryUid == request.auth.uid
-  && request.resource.data.active == true
-  && exists(/databases/$(db)/documents/secretary_codes_public/$(request.resource.data.codeId));
-
-allow update: if isSignedIn()
-  && resource.data.secretaryUid == request.auth.uid;
-
-allow delete: if false;
-}
-
-/* ============================= */
-/* appointments                  */
-/* ============================= */
-
-function isValidAppointmentStatus(s) {
-return s == 'pending'
-  || s == 'confirmed'
-  || s == 'canceled'
-  || s == 'cancelled'
-  || s == 'checked_in'
-  || s == 'no_show';
-}
-
-function allowedStatusTransition(prev, next) {
-return
-  ((prev == 'pending') && (next == 'confirmed' || next == 'canceled' || next == 'cancelled'))
-  ||
-  ((prev == 'confirmed') && (next == 'checked_in' || next == 'no_show' || next == 'canceled' || next == 'cancelled'))
-  ||
-  (prev == next);
-}
-
-match /appointments/{appointmentId} {
-
-allow get, list: if isAdmin()
-  || (isSignedIn() && (
-      resource.data.patientId == request.auth.uid
-      || isOwnerDoctorDoc(resource.data.doctorId)
-      || hasActiveSecretarySession(resource.data.doctorId)
-));
-
-allow create: if isSignedIn()
+  && request.resource.data.status == 'active'
   && request.resource.data.doctorId is string
-  && request.resource.data.patientId is string
-  && isValidAppointmentStatus(request.resource.data.status)
-  && (
-      (isPatient(request.auth.uid)
-        && request.resource.data.patientId == request.auth.uid
-        && request.resource.data.status == 'pending')
-      ||
-      isOwnerDoctorDoc(request.resource.data.doctorId)
-      ||
-      hasActiveSecretarySession(request.resource.data.doctorId)
-);
+  && request.resource.data.codeId is string
+  && exists(/databases/$(db)/documents/secretary_codes_public/$(request.resource.data.codeId))
+  && get(/databases/$(db)/documents/secretary_codes_public/$(request.resource.data.codeId)).data.active == true;
 
-allow update: if isSignedIn()
-  && request.resource.data.doctorId == resource.data.doctorId
-  && request.resource.data.patientId == resource.data.patientId
-  && isValidAppointmentStatus(request.resource.data.status)
-  && allowedStatusTransition(resource.data.status, request.resource.data.status)
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(resource.data.doctorId)
-      || hasActiveSecretarySession(resource.data.doctorId)
-      || (
-        request.auth.uid == resource.data.patientId
-        && (request.resource.data.status == 'canceled' || request.resource.data.status == 'cancelled')
-));
+  allow update: if isSignedIn()
+    && resource.data.secretaryUid == request.auth.uid;
 
-/* السكرتير يمكنه الحذف */
-
-allow delete: if isAdmin()
-  || isOwnerDoctorDoc(resource.data.doctorId)
-  || hasActiveSecretarySession(resource.data.doctorId);
+  // ❌ احذف هذا السطر بالكامل
+  // allow list, delete: if false;
 }
-
 /* ============================= */
-/* doctors                       */
-/* ============================= */
-
-match /doctors/{doctorId} {
-
-allow get: if isSignedIn()
-  || isAdmin()
-  || isOwnerDoctorDoc(doctorId)
-  || hasActiveSecretarySession(doctorId);
-
-allow list: if isSignedIn();
-
-/* منع السكرتير من تعديل إعدادات الطبيب */
-
-allow update: if isAdmin()
-  || isOwnerDoctorDoc(doctorId)
-  || (
-      hasActiveSecretarySession(doctorId)
-      && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-        'slotDuration',
-        'schedule',
-        'workingDays',
-        'startTime',
-        'endTime'
-      ])
-  );
-
-/* ============================= */
-/* secretary codes               */
+/* financial_transactions       */
 /* ============================= */
 
-match /secretary_codes/{codeId} {
+match /financial_transactions/{id} {
 
-allow get, list: if isAdmin()
-  || isOwnerDoctorDoc(doctorId);
+  // ✅ الطبيب يرى معاملاته فقط
+  allow read: if
+    isSignedIn()
+    && userRole(request.auth.uid) == 'doctor'
+    && resource.data.doctorId == userDoc(request.auth.uid).data.doctorId;
 
-allow create, update, delete: if isAdmin()
-  || isOwnerDoctorDoc(doctorId);
+  // ✅ الإنشاء عند check-in
+  allow create: if
+    isSignedIn()
+    && (
+      userRole(request.auth.uid) == 'doctor'
+      || userRole(request.auth.uid) == 'secretary'
+    );
+
+  // ❌ لا تعديل ولا حذف (محاسبة)
+  allow update, delete: if false;
 }
+    /* ============================= */
+    /* doctors (PROFILE ONLY)        */
+    /* ============================= */
 
-}
+    match /doctors/{doctorId} {
 
+      // ✅ القراءة مفتوحة
+      allow get, list: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      // ✅ التعديل فقط مع اشتراك نشط
+      allow update: if
+        isAdmin()
+        || (
+          isOwnerDoctor(doctorId)
+          && isDoctorSubscriptionActive(request.auth.uid)
+        )
+        || hasActiveSecretarySession(doctorId);
+    }
 /* ============================= */
-/* secretary_codes_public        */
+/* doctors/secretary_codes       */
 /* ============================= */
-
-match /secretary_codes_public/{codeId} {
-
-allow get, list: if request.auth != null;
-
-allow create: if request.auth != null
-  && userRole(request.auth.uid) == "doctor";
-
-allow update, delete: if request.auth != null
-  && (
-      userRole(request.auth.uid) == "admin"
-      ||
-      resource.data.doctorId ==
-      userDoc(request.auth.uid).data.doctorId
-);
+match /doctors/{doctorId}/secretary_codes/{codeId} {
+  // ✅ السكريتير يستطيع قراءة الكود للتحقق
+  allow get: if isSignedIn();
+  // الطبيب فقط يرى القائمة
+  allow list: if
+    isAdmin()
+    || isOwnerDoctor(doctorId);
+  // إنشاء الكود
+  allow create: if
+    isOwnerDoctor(doctorId)
+    && request.resource.data.code == codeId
+    && request.resource.data.doctorId == doctorId
+    && request.resource.data.active == true;
+  // تعديل الكود
+  allow update: if
+    isAdmin()
+    || isOwnerDoctor(doctorId);
+  // حذف
+  allow delete: if
+    isAdmin()
+    || isOwnerDoctor(doctorId);
 }
-
 /* ============================= */
 /* doctor_slots                  */
 /* ============================= */
 
 match /doctor_slots/{slotId} {
 
-/* ============================= */
-/* القراءة                       */
-/* ============================= */
+  // القراءة
+  allow get, list: if isSignedIn();
 
-allow get, list: if isSignedIn();
+  // إنشاء الـ slot عند الحجز
+  allow create: if
+    isSignedIn()
+    && request.resource.data.patientId == request.auth.uid;
 
+  // حذف/تحديث الـ slot عند الإلغاء
+  allow update, delete: if
+    isSignedIn()
+    && (
+      // ✅ المريض صاحب الحجز
+      resource.data.patientId == request.auth.uid
+
+      // ✅ الطبيب صاحب الموعد
+      || (
+        userRole(request.auth.uid) == 'doctor'
+        && userDoc(request.auth.uid).data.doctorId == resource.data.doctorId
+      )
+
+      // ✅ السكرتير النشط لهذا الطبيب
+      || (
+        userRole(request.auth.uid) == 'secretary'
+        && userDoc(request.auth.uid).data.activeSecretaryDoctorId
+             == resource.data.doctorId
+      )
+    );
+}
 /* ============================= */
-/* الإنشاء (الحجز)               */
-/* ============================= */
-
-allow create: if isSignedIn()
-  && request.resource.data.doctorId is string
-  && request.resource.data.date is string
-  && request.resource.data.time is string
-  && request.resource.data.taken == true;
-
-/* ============================= */
-/* التحديث                       */
-/* ============================= */
-
-
-allow update: if isSignedIn()
-  && (
-       isAdmin()
-       || isOwnerDoctorDoc(resource.data.doctorId)
-       || hasActiveSecretarySession(resource.data.doctorId)
-       || (
-            // المريض يحجز slot (taken: false → true)
-            request.auth.uid == resource.data.patientId
-            && request.resource.data.taken == true
-            && resource.data.taken != true
-          )
-       || (
-            // NEW ✅ المريض يلغي slot (taken: true → false)
-            request.auth.uid == resource.data.patientId
-            && request.resource.data.taken == false
-            && resource.data.taken == true
-          )
-     );
-
-/* ============================= */
-/* الحذف                         */
+/* appointments                  */
 /* ============================= */
 
-allow delete: if isAdmin()
-  || isOwnerDoctorDoc(resource.data.doctorId)
+match /appointments/{id} {
+
+  /* ---------- القراءة ---------- */
+  allow get, list: if
+    isAdmin()
+
+    // ✅ الطبيب يرى مواعيده فقط
+    || (
+      isSignedIn()
+      && userRole(request.auth.uid) == 'doctor'
+       && userDoc(request.auth.uid).data.doctorId == resource.data.doctorId
+    )
+
+    // ✅ المريض يرى مواعيده فقط
+    || (
+      isSignedIn()
+      && resource.data.patientId == request.auth.uid
+    )
+
+    // ✅ السكرتير يرى مواعيد الطبيب الذي يخدمه
+    || hasActiveSecretarySession(resource.data.doctorId);
+
+  /* ---------- الإنشاء ---------- */
+  allow create: if
+    isAdmin()
+
+    // ✅ المريض يحجز لنفسه
+    || (
+      isSignedIn()
+      && request.resource.data.patientId == request.auth.uid
+    )
+
+    // ✅ الطبيب (إضافة يدوية باشتراك نشط)
+    || (
+      isSignedIn()
+      && userRole(request.auth.uid) == 'doctor'
+      && isDoctorSubscriptionActive(request.auth.uid)
+    )
+
+    // ✅ السكرتير
+    || hasActiveSecretarySession(request.resource.data.doctorId);
+
+/* ---------- التعديل ---------- */
+allow update: if
+  isAdmin()
+
+  // ✅ الطبيب يعدّل مواعيده
+  || (
+    isSignedIn()
+    && userRole(request.auth.uid) == 'doctor'
+    && userDoc(request.auth.uid).data.doctorId == resource.data.doctorId
+  )
+
+  // ✅ المريض يلغي موعده فقط
+  || (
+    isSignedIn()
+    && resource.data.patientId == request.auth.uid
+    && request.resource.data.status == 'canceled'
+  )
+
+  // ✅ السكرتير
   || hasActiveSecretarySession(resource.data.doctorId);
-}
-/* ============================= */
-/* doctor_days                   */
-/* ============================= */
 
-match /doctor_days/{doctorId} {
+/* ---------- الحذف ---------- */
+allow delete: if
+  isAdmin()
 
-allow get, list: if isSignedIn()
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(doctorId)
-      || hasActiveSecretarySession(doctorId)
+  // ✅ المريض يحذف موعده الملغى
+  || (
+    isSignedIn()
+    && resource.data.patientId == request.auth.uid
+    && resource.data.status == 'canceled'
+  )
+
+  // ✅ الطبيب يحذف مواعيده الملغاة فقط
+  || (
+    isSignedIn()
+    && userRole(request.auth.uid) == 'doctor'
+    && userDoc(request.auth.uid).data.doctorId == resource.data.doctorId
+    && resource.data.status == 'canceled'
+  )
+
+  // ✅ السكرتير يحذف مواعيد الطبيب الذي يخدمه (إذا كانت ملغاة)
+  || (
+    isSignedIn()
+    && userRole(request.auth.uid) == 'secretary'
+    && userDoc(request.auth.uid).data.activeSecretaryDoctorId == resource.data.doctorId
+    && resource.data.status == 'canceled'
   );
-
-allow create: if isSignedIn()
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(doctorId)
-      || hasActiveSecretarySession(doctorId)
-  );
-
-allow update: if isSignedIn()
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(doctorId)
-      || hasActiveSecretarySession(doctorId)
-  );
-
-allow delete: if isAdmin();
-
-match /days/{dayId} {
-
-allow get, list: if isSignedIn()
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(doctorId)
-      || hasActiveSecretarySession(doctorId)
-  );
-
-allow create: if isSignedIn()
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(doctorId)
-      || hasActiveSecretarySession(doctorId)
-  );
-
-allow update: if isSignedIn()
-  && (
-      isAdmin()
-      || isOwnerDoctorDoc(doctorId)
-      || hasActiveSecretarySession(doctorId)
-  );
-
-allow delete: if isAdmin();
-
 }
+    /* ============================= */
+    /* doctor_days                   */
+    /* ============================= */
 
-}
+    match /doctor_days/{doctorId} {
 
+      allow get, list: if isSignedIn();
+
+      allow create, update: if
+        isAdmin()
+        || (
+          isOwnerDoctor(doctorId)
+          && isDoctorSubscriptionActive(request.auth.uid)
+        )
+        || hasActiveSecretarySession(doctorId);
+
+      allow delete: if isAdmin();
+    }
 /* ============================= */
-/* doctor_days_off               */
+/* doctor_days/days (SUBCOLL)    */
 /* ============================= */
 
-match /doctor_days_off/{docId} {
+match /doctor_days/{doctorId}/days/{dayId} {
 
-allow get, list: if isSignedIn();
+  // ✅ القراءة مسموحة (حتى لو لا توجد أيام)
+  allow get, list: if isSignedIn();
 
-allow create, update: if isSignedIn()
+  // ✅ التعديل فقط باشتراك نشط
+  allow create, update: if
+    isAdmin()
+    || (
+      isOwnerDoctor(doctorId)
+      && isDoctorSubscriptionActive(request.auth.uid)
+    )
+    || hasActiveSecretarySession(doctorId);
+
+  allow delete: if isAdmin();
+}
+    /* ============================= */
+    /* doctor_days_off               */
+    /* ============================= */
+
+    match /doctor_days_off/{id} {
+
+      allow get, list: if isSignedIn();
+
+      allow create, update: if
+        isAdmin()
+        || (
+          isOwnerDoctor(request.resource.data.doctorId)
+          && isDoctorSubscriptionActive(request.auth.uid)
+        )
+        || hasActiveSecretarySession(request.resource.data.doctorId);
+
+     allow delete: if
+  isSignedIn()
   && (
-      isOwnerDoctorDoc(request.resource.data.doctorId)
-      || hasActiveSecretarySession(request.resource.data.doctorId)
-      || isAdmin()
+    isAdmin()
+    || isOwnerDoctor(resource.data.doctorId)
+    || hasActiveSecretarySession(resource.data.doctorId)
   );
+    }
 
-allow delete: if isAdmin()
-  || isOwnerDoctorDoc(resource.data.doctorId)
-  || hasActiveSecretarySession(resource.data.doctorId);
+
+
+    /* ============================= */
+    /* reports                       */
+    /* ============================= */
+
+    match /reports/{id} {
+
+      allow get, list: if isAdmin()
+        || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isAdmin();
+    }
+
+    /* ============================= */
+    /* read-only                     */
+    /* ============================= */
+
+    match /governorates/{id} {
+      allow get, list: if true;
+    }
+
+    match /specialties/{id} {
+      allow get, list: if true;
+    }
+match /secretaries/{uid} {
+  allow create, read: if isSignedIn()
+    && request.auth.uid == uid;
+
+  allow update: if isSignedIn()
+    && request.auth.uid == uid;
+
+  allow delete: if isAdmin();
 }
+    /* ============================= */
+    /* default deny                  */
+    /* ============================= */
 
-/* ============================= */
-/* reports                       */
-/* ============================= */
-
-function isValidReportStatus(s) {
-return s == 'open'
-  || s == 'in_progress'
-  || s == 'resolved'
-  || s == 'closed';
-}
-
-match /reports/{reportId} {
-
-allow get, list: if isAdmin()
-  || (isSignedIn() && resource.data.createdBy == request.auth.uid);
-
-allow create: if isSignedIn()
-  && request.resource.data.createdBy == request.auth.uid
-  && isValidReportStatus(request.resource.data.status);
-
-allow update: if isAdmin()
-  && isValidReportStatus(request.resource.data.status);
-
-allow delete: if isAdmin();
-}
-
-/* ============================= */
-/* default deny                  */
-/* ============================= */
-
-match /{document=**} {
-allow read, write: if false;
-}
-
-// ===== doctor_subscriptions/{doctorId} =====
-match /doctor_subscriptions/{doctorId} {
-  // القراءة لأي مستخدم مُسجّل؛ لا توجد بيانات حساسة هنا
-  allow get, list: if request.auth != null;
-
-  // الكتابة للأدمن فقط (يمكنك فتحها للطبيب أيضاً إن رغبت)
-  allow create, update, delete: if request.auth != null
-    && get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role == "admin";
-}
-
-}
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
 }

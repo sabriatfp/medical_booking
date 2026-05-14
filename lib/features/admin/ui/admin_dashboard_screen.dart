@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:medical_booking/features/admin/ui/admin_subscriptions_screen.dart';
 import 'package:medical_booking/features/admin/ui/admin_reports_screen.dart';
+import 'package:medical_booking/features/admin/ui/admin_subscription_requests_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -73,75 +74,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
   }
 
-  Future<void> _syncDoctorSubscriptions() async {
-    final t = AppLocalizations.of(context)!;
-
-    if (!_isAdmin || !mounted) return;
-
-    final db = FirebaseFirestore.instance;
-    final messenger = ScaffoldMessenger.of(context);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    int processed = 0;
-    int updated = 0;
-
-    try {
-      final usersSnap = await db
-          .collection('users')
-          .where('role', isEqualTo: 'doctor')
-          .get(const GetOptions(source: Source.server));
-
-      final batch = db.batch();
-
-      for (final doc in usersSnap.docs) {
-        processed++;
-        final data = doc.data();
-
-        final doctorId = (data['doctorId'] ?? '').toString();
-        if (doctorId.isEmpty) continue;
-
-        final active = data['subscriptionActive'] == true;
-        final endTs = data['subscriptionEnd'] as Timestamp?;
-        final plan = data['subscriptionPlan'];
-
-        final subRef = db.collection('doctor_subscriptions').doc(doctorId);
-
-        batch.set(subRef, {
-          'active': active,
-          'end': endTs,
-          if (plan != null) 'plan': plan,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        updated++;
-
-        if (updated % 400 == 0) {
-          await batch.commit();
-        }
-      }
-
-      await batch.commit();
-
-      if (!mounted) return;
-
-      Navigator.of(context).pop();
-
-      messenger.showSnackBar(
-        SnackBar(content: Text(t.syncCompleted(processed, updated))),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      Navigator.of(context).pop();
-      messenger.showSnackBar(SnackBar(content: Text("${t.syncFailed}: $e")));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
@@ -161,6 +93,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       return const Scaffold();
     }
+
     final List<_AdminEntry> items = [
       _AdminEntry(
         icon: Icons.verified_user,
@@ -168,6 +101,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         subtitle: t.manageSubscriptionsSubtitle,
         builder: (_) => const AdminSubscriptionsScreen(),
       ),
+
+      // ✅✅✅ طلبات تجديد الاشتراك
+      _AdminEntry(
+        icon: Icons.notifications_active,
+        title: t.subscriptionRequests,
+        subtitle: t.subscriptionRequestsSubtitle,
+        builder: (_) => const AdminSubscriptionRequestsScreen(),
+      ),
+
       _AdminEntry(
         icon: Icons.report,
         title: t.reports,
@@ -181,26 +123,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         title: Text(t.adminDashboard),
 
         actions: [
-          // ✅ زر المزامنة (للأدمن فقط)
-          if (_isAdmin)
-            IconButton(
-              tooltip: t.syncDoctorSubscriptions,
-              icon: _syncing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.sync),
-              onPressed: _syncing
-                  ? null
-                  : () async {
-                      setState(() => _syncing = true);
-                      await _syncDoctorSubscriptions();
-                      if (mounted) setState(() => _syncing = false);
-                    },
-            ),
-
           // ✅ زر تسجيل الخروج (للجميع)
           IconButton(
             tooltip: t.logout,
@@ -212,6 +134,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
+
         itemCount: items.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
 

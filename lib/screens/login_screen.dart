@@ -154,7 +154,7 @@ class _LoginScreenState extends State<LoginScreen> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      setState(() => error = e.message ?? t.loginError);
+      setState(() => error = _mapAuthError(e, t));
     } catch (_) {
       setState(() => error = t.unexpectedError);
     } finally {
@@ -284,73 +284,82 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 14),
 
                 // ✅ زر تغيير اللغة + زر السكريتير
+                // ✅ زر تغيير اللغة + زر السكريتير
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start, // مهم
                   children: [
-                    // ✅ زر تغيير اللغة
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.language),
-                      label: Text(t.language),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: Text(t.chooseLanguage),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                TextButton(
-                                  onPressed: () {
-                                    Provider.of<LanguageProvider>(
-                                      context,
-                                      listen: false,
-                                    ).changeLanguage('ar');
-                                    Navigator.pop(context);
-                                  },
-                                  child: Text(t.arabic),
+                    // ✅ عمود زر اللغة
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.language),
+                          label: Text(t.language),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: Text(t.chooseLanguage),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Provider.of<LanguageProvider>(
+                                          context,
+                                          listen: false,
+                                        ).changeLanguage('ar');
+                                        Navigator.pop(context);
+                                      },
+                                      child: Text(t.arabic),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Provider.of<LanguageProvider>(
+                                          context,
+                                          listen: false,
+                                        ).changeLanguage('fr');
+                                        Navigator.pop(context);
+                                      },
+                                      child: Text(t.french),
+                                    ),
+                                  ],
                                 ),
-                                TextButton(
-                                  onPressed: () {
-                                    Provider.of<LanguageProvider>(
-                                      context,
-                                      listen: false,
-                                    ).changeLanguage('fr');
-                                    Navigator.pop(context);
-                                  },
-                                  child: Text(t.french),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 6), // ✅ نفس المسافة
+                        const SizedBox(height: 16), // ✅ عنصر وهمي للمحاذاة
+                      ],
                     ),
 
-                    // ✅ زر فضاء السكريتير
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.badge_outlined),
-                      label: Text(t.secretarySpace),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SecretaryCodeScreen(),
-                          ),
-                        );
-                      },
+                    // ✅ عمود زر السكريتير
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.badge_outlined),
+                          label: Text(t.secretarySpace),
+                          onPressed: () {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const SecretaryCodeScreen(),
+                              ),
+                              (_) => false,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          t.secretaryHint,
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.end,
+                        ),
+                      ],
                     ),
                   ],
-                ),
-
-                const SizedBox(height: 10),
-
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    t.secretaryHint,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.right,
-                  ),
                 ),
               ],
             ),
@@ -358,5 +367,30 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  String _mapAuthError(FirebaseAuthException e, AppLocalizations t) {
+    switch (e.code) {
+      case 'invalid-email':
+        return t.invalidEmail; // "البريد الإلكتروني غير صحيح"
+
+      case 'user-not-found':
+        return t.userNotFound; // "لا يوجد حساب بهذا البريد"
+
+      case 'wrong-password':
+        return t.wrongPassword; // "كلمة المرور غير صحيحة"
+
+      case 'user-disabled':
+        return t.userDisabled; // "هذا الحساب معطّل"
+
+      case 'too-many-requests':
+        return t.tooManyRequests; // "محاولات كثيرة، حاول لاحقًا"
+
+      case 'network-request-failed':
+        return t.networkError; // "تحقق من اتصال الإنترنت"
+
+      default:
+        return t.loginError; // "تعذر تسجيل الدخول"
+    }
   }
 }

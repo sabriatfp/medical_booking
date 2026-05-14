@@ -21,6 +21,7 @@ class DoctorService {
     if (!snap.exists) return;
 
     final data = snap.data()!;
+    if (weeklyTemplate.isEmpty) return;
     List weeks = List.from(data['weeks'] ?? []);
 
     final today = DateTime.now();
@@ -28,9 +29,9 @@ class DoctorService {
 
     // 1️⃣ حذف الأسابيع المنتهية
     weeks.removeWhere((w) {
-      final start = DateTime.parse(w['startDate']);
+      final start = _parseStartDate(w['startDate']);
       final end = start.add(const Duration(days: 6));
-      return end.isBefore(todayDate.subtract(const Duration(days: 1)));
+      return end.isBefore(todayDate);
     });
 
     // 2️⃣ توليد الأيام (نفس منطقك)
@@ -103,15 +104,15 @@ class DoctorService {
       DateTime newStart;
 
       if (weeks.isEmpty) {
-        // ✅ أبقِ الأسبوع الحالي (تحسين UX)
-        newStart = startOfCurrentWeek(todayDate);
+        // ✅ ابدأ دائمًا من الأسبوع القادم
+        newStart = startOfCurrentWeek(todayDate).add(const Duration(days: 1));
       } else {
-        final lastStart = DateTime.parse(weeks.last['startDate']);
+        final lastStart = _parseStartDate(weeks.last['startDate']);
         newStart = lastStart.add(const Duration(days: 7));
       }
 
       weeks.add({
-        "startDate": newStart.toIso8601String(),
+        "startDate": DateFormat('yyyy-MM-dd').format(newStart),
         "days": generateWeekDays(newStart),
       });
     }
@@ -155,6 +156,62 @@ class DoctorService {
       if (kDebugMode) debugPrint('role() read error: $e\n$st');
       return null;
     }
+  }
+
+  Future<void> cancelAppointment({
+    required String appointmentId,
+    required String slotId,
+  }) async {
+    final fs = FirebaseFirestore.instance;
+    final uid = _uid();
+
+    await fs.runTransaction((tx) async {
+      final apptRef = fs.collection('appointments').doc(appointmentId);
+      final slotRef = fs.collection('doctor_slots').doc(slotId);
+
+      // ✅ 1️⃣ إلغاء الموعد
+      tx.update(apptRef, {
+        'status': 'canceled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': uid,
+      });
+
+      // ✅ 2️⃣ تحرير الـ slot
+      tx.delete(slotRef);
+    });
+  }
+
+  Future<void> checkInAppointment({
+    required String appointmentId,
+    required String doctorId,
+    required String patientId,
+    required double amount,
+  }) async {
+    final fs = FirebaseFirestore.instance;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    await fs.runTransaction((tx) async {
+      final apptRef = fs.collection('appointments').doc(appointmentId);
+      final financeRef = fs.collection('financial_transactions').doc();
+
+      tx.update(apptRef, {
+        'status': 'checked_in',
+        'checkedInAt': FieldValue.serverTimestamp(),
+        'updatedBy': uid,
+      });
+
+      tx.set(financeRef, {
+        'doctorId': doctorId,
+        'appointmentId': appointmentId,
+        'patientId': patientId,
+        'amount': amount,
+        'currency': 'TND',
+        'status': 'paid',
+        'source': 'check_in',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   /// يستنتج doctorId للمستخدم الحالي:
@@ -368,6 +425,20 @@ class DoctorService {
         .collection('secretary_codes')
         .orderBy('createdAt', descending: true)
         .snapshots();
+  }
+
+  static DateTime _parseStartDate(dynamic raw) {
+    if (raw is String) {
+      // yyyy-MM-dd
+      if (!raw.contains('T')) {
+        return DateTime.parse("${raw}T00:00:00");
+      }
+      // ISO كامل
+      return DateTime.parse(raw);
+    }
+
+    // fallback
+    return DateTime.now();
   }
 
   /// استهلاك/إبطال كود سكرتير (المسار الخاص)

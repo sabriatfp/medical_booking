@@ -10,6 +10,7 @@ class DoctorsListScreen extends StatelessWidget {
 
   Future<List<Doctor>> _loadDoctors() async {
     final snap = await FirebaseFirestore.instance.collection('doctors').get();
+
     return snap.docs.map((d) {
       return Doctor.fromMap(d.id, d.data());
     }).toList();

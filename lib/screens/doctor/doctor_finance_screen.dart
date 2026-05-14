@@ -34,78 +34,78 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
       return;
     }
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get(const GetOptions(source: Source.server));
 
-    userData = userDoc.data();
-    doctorId = userData?['doctorId'];
+      userData = userDoc.data();
+      doctorId = userData?['doctorId'];
 
-    if (doctorId == null) {
-      setState(() => loading = false);
-      return;
-    }
-
-    final now = DateTime.now();
-    final firstDayOfMonth = DateTime(now.year, now.month, 1);
-
-    totalRevenue = 0;
-    monthlyRevenue = 0;
-    todayRevenue = 0;
-    confirmedAppointments = 0;
-    cancelledAppointments = 0;
-
-    final snap = await FirebaseFirestore.instance
-        .collection('appointments')
-        .where('doctorId', isEqualTo: doctorId)
-        .get();
-
-    for (var doc in snap.docs) {
-      final data = doc.data();
-
-      final rawStatus = (data['status'] ?? 'confirmed')
-          .toString()
-          .toLowerCase();
-      final isCanceled = rawStatus == 'canceled' || rawStatus == 'cancelled';
-      final isConfirmed = rawStatus == 'confirmed';
-
-      final price = (data['price'] is num)
-          ? (data['price'] as num).toDouble()
-          : 0.0;
-
-      final date = DateTime.tryParse(data['date'] ?? '');
-      if (date == null) continue;
-
-      if (isCanceled) {
-        cancelledAppointments++;
-        continue;
+      if (doctorId == null) {
+        if (mounted) setState(() => loading = false);
+        return;
       }
 
-      if (isConfirmed) {
-        confirmedAppointments++;
-        totalRevenue += price;
+      final now = DateTime.now();
 
-        if (date.isAfter(firstDayOfMonth.subtract(const Duration(days: 1))) &&
-            date.month == now.month &&
-            date.year == now.year) {
-          monthlyRevenue += price;
+      totalRevenue = 0;
+      monthlyRevenue = 0;
+      todayRevenue = 0;
+      confirmedAppointments = 0;
+      cancelledAppointments = 0;
+
+      // ✅ 1️⃣ جلب العمليات المالية (Check‑in فقط)
+      final txSnap = await FirebaseFirestore.instance
+          .collection('financial_transactions')
+          .where('doctorId', isEqualTo: doctorId)
+          .where('status', isEqualTo: 'paid')
+          .get();
+
+      for (var doc in txSnap.docs) {
+        final data = doc.data();
+
+        final amount = (data['amount'] is num)
+            ? (data['amount'] as num).toDouble()
+            : 0.0;
+
+        totalRevenue += amount;
+
+        final Timestamp? ts = data['createdAt'] as Timestamp?;
+        if (ts == null) continue;
+        final date = ts.toDate();
+
+        if (date.year == now.year && date.month == now.month) {
+          monthlyRevenue += amount;
         }
 
         if (date.year == now.year &&
             date.month == now.month &&
             date.day == now.day) {
-          todayRevenue += price;
+          todayRevenue += amount;
         }
-      }
-    }
 
-    if (mounted) {
-      setState(() => loading = false);
+        confirmedAppointments++; // ✅ عدد المرضى الذين حضروا
+      }
+
+      // ✅ 2️⃣ عدد المواعيد الملغاة (اختياري – ليس ماليًا)
+      final cancelledSnap = await FirebaseFirestore.instance
+          .collection('appointments')
+          .where('doctorId', isEqualTo: doctorId)
+          .where('status', isEqualTo: 'canceled')
+          .get();
+
+      cancelledAppointments = cancelledSnap.size;
+    } catch (e) {
+      debugPrint("❌ Finance load failed: $e");
+    } finally {
+      // ✅✅✅ هذا هو السطر الذي كان ناقصًا
+      if (mounted) setState(() => loading = false);
     }
   }
 
@@ -291,7 +291,7 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
   Widget _subscriptionCard() {
     final t = AppLocalizations.of(context)!;
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
 
     final active = (userData?['subscriptionActive'] ?? false) == true;
     final Timestamp? subEndTs = userData?['subscriptionEnd'] as Timestamp?;
@@ -356,12 +356,15 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
               ),
 
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  t.subscriptionStatus,
-                  style: const TextStyle(fontSize: 16),
+                Expanded(
+                  child: Text(
+                    t.subscriptionStatus,
+                    style: const TextStyle(fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   status,
                   style: TextStyle(color: color, fontWeight: FontWeight.bold),
@@ -381,17 +384,34 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
 
             const SizedBox(height: 14),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(t.comingSoon)));
-                },
-                child: Text(t.renewSubscription),
+            if (status == t.subscriptionExpired)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user == null) return;
+
+                    final db = FirebaseFirestore.instance;
+
+                    await db.collection('subscription_requests').add({
+                      'doctorUid': user.uid,
+                      'doctorId': userData?['doctorId'],
+                      'doctorName': userData?['name'] ?? '',
+                      'email': userData?['email'] ?? '',
+                      'status': 'pending',
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
+
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(t.subscriptionRequestSent)),
+                    );
+                  },
+                  child: Text(t.renewSubscription),
+                ),
               ),
-            ),
           ],
         ),
       ),

@@ -9,7 +9,7 @@ class DoctorCard extends StatelessWidget {
   const DoctorCard({super.key, required this.doctor, required this.onTap});
 
   bool _canBookDoctor() {
-    return doctor.isAvailable && doctor.subscriptionActive;
+    return doctor.isAvailable;
   }
 
   @override
@@ -115,9 +115,10 @@ class DoctorCard extends StatelessWidget {
                       child: Text(
                         _canBookDoctor()
                             ? t.bookAppointment
-                            : doctor.subscriptionActive == false
-                            ? t.subscriptionExpired
+                            : doctor.isAvailable
+                            ? t.bookAppointment
                             : t.doctorNotAvailable,
+
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -159,10 +160,6 @@ class DoctorCard extends StatelessWidget {
   // ✅ Badge الحالة
   // ===============================
   Widget _availabilityBadge(AppLocalizations t) {
-    if (!doctor.subscriptionActive) {
-      return _badge(t.subscriptionExpired, Colors.grey, Icons.lock);
-    }
-
     return doctor.isAvailable
         ? _badge(t.available, Colors.green, Icons.check_circle)
         : _badge(t.notAvailable, Colors.red, Icons.cancel);

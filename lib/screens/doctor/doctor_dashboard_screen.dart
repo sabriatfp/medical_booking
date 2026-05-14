@@ -135,17 +135,29 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   itemCount: docs.length,
                   itemBuilder: (context, i) {
                     final d = docs[i].data();
+                    final String? slotId = d['slotId'] as String?;
 
                     DateTime? dt;
                     if (d['dateTime'] is Timestamp) {
                       dt = (d['dateTime'] as Timestamp).toDate();
                     }
+                    final DateTime todayStart = DateTime(
+                      DateTime.now().year,
+                      DateTime.now().month,
+                      DateTime.now().day,
+                    );
+
+                    // ✅ true إذا الموعد أمس أو قبل
+                    final bool isBeforeToday =
+                        dt != null && dt.isBefore(todayStart);
 
                     final patientName = (d['patientName'] ?? '').toString();
                     final patientPhone = (d['patientPhone'] ?? '').toString();
                     final status = (d['status'] ?? 'pending').toString();
 
-                    final Color statusColor = status == 'confirmed'
+                    final Color statusColor = isBeforeToday
+                        ? Colors.grey
+                        : status == 'confirmed'
                         ? Colors.green
                         : status == 'canceled'
                         ? Colors.red
@@ -156,16 +168,21 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                     final isCancelable = status != 'canceled';
 
                     return Card(
+                      color: isBeforeToday ? Colors.grey.shade100 : null,
                       child: ListTile(
-                        leading: const Icon(Icons.calendar_month),
+                        leading: Icon(
+                          Icons.calendar_month,
+                          color: isBeforeToday ? Colors.grey : null,
+                        ),
 
                         title: Row(
                           children: [
                             Expanded(
                               child: Text(
                                 patientName.isEmpty ? t.patient : patientName,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w600,
+                                  color: isBeforeToday ? Colors.grey : null,
                                 ),
                               ),
                             ),
@@ -206,19 +223,38 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                           onSelected: (v) async {
                             try {
                               if (v == 'confirm') {
+                                if (isBeforeToday) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        t.cannotConfirmPastAppointment,
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
                                 await DoctorService().updateAppointmentStatus(
                                   docs[i].id,
                                   'confirmed',
                                 );
+
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(t.appointmentConfirmed),
                                   ),
                                 );
                               } else if (v == 'cancel') {
-                                await DoctorService().updateAppointmentStatus(
-                                  docs[i].id,
-                                  'canceled',
+                                if (slotId == null || slotId.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(t.operationFailed)),
+                                  );
+                                  return;
+                                }
+
+                                await DoctorService().cancelAppointment(
+                                  appointmentId: docs[i].id,
+                                  slotId: slotId,
                                 );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -246,7 +282,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
 
                           itemBuilder: (_) {
                             return [
-                              if (isPending)
+                              if (isPending && !isBeforeToday)
                                 PopupMenuItem(
                                   value: 'confirm',
                                   child: Text(t.confirmAppointment),

@@ -12,6 +12,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get appTitle => 'Medical Booking';
 
   @override
+  String get failedToLoadUserData => 'Échec de chargement des données';
+
+  @override
+  String get invalidUserRole => 'Compte non valide, veuillez vous reconnecter';
+
+  @override
   String get scheduleSettings => 'Paramètres d\'horaire';
 
   @override
@@ -61,6 +67,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsSaved => 'Paramètres enregistrés avec succès';
 
   @override
+  String get userNotFound =>
+      'Aucun compte n’est associé à cette adresse e-mail';
+
+  @override
+  String get wrongPassword => 'Mot de passe incorrect';
+
+  @override
+  String get userDisabled => 'Ce compte a été désactivé';
+
+  @override
+  String get tooManyRequests =>
+      'Trop de tentatives. Veuillez réessayer plus tard';
+
+  @override
   String get from => 'De';
 
   @override
@@ -80,6 +100,23 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get saveChanges => 'Enregistrer les modifications';
+
+  @override
+  String get subscriptionExpiredMessage =>
+      'Votre abonnement est expiré. Vous ne pouvez plus utiliser les services de l’application.';
+
+  @override
+  String get subscriptionEndedAt => 'Date de fin de l’abonnement';
+
+  @override
+  String get contactAdministration => 'Contacter l’administration';
+
+  @override
+  String get contactAdminHint =>
+      'Veuillez contacter l’administration pour renouveler votre abonnement';
+
+  @override
+  String get resetFilters => 'Réinitialiser les filtres';
 
   @override
   String get doctorCalendar => 'Calendrier du médecin';
@@ -210,6 +247,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deleteDayOff => 'Supprimer ce jour';
+
+  @override
+  String get tapToChoose => 'Appuyez pour choisir';
 
   @override
   String get doctorDashboard => 'Tableau du médecin';
@@ -640,6 +680,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get noResults => 'Aucun résultat';
 
   @override
+  String get cannotConfirmPastAppointment =>
+      'Impossible de confirmer un rendez-vous à une date passée';
+
+  @override
   String get reportMarkedProcessed => 'Signalement marqué comme traité';
 
   @override
@@ -1016,9 +1060,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get secretaryCodeExample => 'Ex : ABC123';
 
   @override
-  String get failedToLoadUserData => 'Échec de chargement des données';
-
-  @override
   String get searchReports => 'Recherche dans les rapports';
 
   @override
@@ -1175,4 +1216,135 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get currentPasswordIncorrect => 'Le mot de passe actuel est incorrect';
+
+  @override
+  String get subscriptionRequests => 'Demandes de renouvellement';
+
+  @override
+  String get noSubscriptionRequests => 'Aucune demande pour le moment';
+
+  @override
+  String get requestDate => 'Date de la demande';
+
+  @override
+  String get unknownDoctor => 'Médecin inconnu';
+
+  @override
+  String get reject => 'Refuser';
+
+  @override
+  String get subscriptionRequestsSubtitle =>
+      'Demandes de renouvellement envoyées par les médecins';
+
+  @override
+  String get requestSubscriptionRenewal => 'Demander le renouvellement';
+
+  @override
+  String get subscriptionRequestSent =>
+      'La demande de renouvellement a été envoyée';
+
+  @override
+  String get subscriptionRequestAlreadySent =>
+      'Une demande de renouvellement a déjà été envoyée';
+
+  @override
+  String get noCodes => 'Aucun code disponible';
+
+  @override
+  String get optionalExpiryDate => 'Ajouter une date d’expiration (optionnel)';
+
+  @override
+  String get chooseDate => 'Choisir une date';
+
+  @override
+  String get expiresOn => 'Expire le';
+
+  @override
+  String get codeNotValid => 'Code incorrect';
+
+  @override
+  String get confirmDelete => 'Confirmer la suppression ?';
+
+  @override
+  String get invalidCodeFormat => 'Format du code invalide';
+
+  @override
+  String get copy => 'Copier';
+
+  @override
+  String get enterSecretaryCode =>
+      'Entrez le code du secrétaire fourni par le médecin';
+
+  @override
+  String get usedBy => 'Utilisé par';
+
+  @override
+  String get monday => 'Lundi';
+
+  @override
+  String get tuesday => 'Mardi';
+
+  @override
+  String get wednesday => 'Mercredi';
+
+  @override
+  String get thursday => 'Jeudi';
+
+  @override
+  String get friday => 'Vendredi';
+
+  @override
+  String get saturday => 'Samedi';
+
+  @override
+  String get sunday => 'Dimanche';
+
+  @override
+  String get acceptBookings => 'Accepter les réservations';
+
+  @override
+  String get acceptBookingsOn =>
+      'Le médecin est visible et accepte de nouvelles réservations';
+
+  @override
+  String get acceptBookingsOff =>
+      'Le médecin n\'est pas disponible actuellement';
+
+  @override
+  String get bookingsEnabled => 'La réception des réservations a été activée';
+
+  @override
+  String get bookingsDisabled =>
+      'La réception des réservations a été désactivée';
+
+  @override
+  String get savePrice => 'Enregistrer le prix';
+
+  @override
+  String get saving => 'Enregistrement en cours...';
+
+  @override
+  String get priceSavedSuccessfully => 'Le prix a été enregistré avec succès';
+
+  @override
+  String get invalidPrice => 'Veuillez entrer un prix valide';
+
+  @override
+  String get confirmCancelAppointment =>
+      'Êtes-vous sûr de vouloir annuler ce rendez-vous ?';
+
+  @override
+  String get yesCancel => 'Oui, annuler';
+
+  @override
+  String get no => 'Retour';
+
+  @override
+  String get enterPaidAmount => 'Saisir le montant payé';
+
+  @override
+  String get amountHint => 'Montant';
+
+  @override
+  String get currency => 'DT';
 }

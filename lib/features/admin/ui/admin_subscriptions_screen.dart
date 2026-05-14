@@ -1,4 +1,5 @@
 // lib/admin/ui/admin_subscriptions_screen.dart
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -15,8 +16,30 @@ class AdminSubscriptionsScreen extends StatefulWidget {
 enum SubFilter { all, active, inactive, expiringSoon }
 
 class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
+  Map<String, dynamic>? _navArgs;
   final _searchCtrl = TextEditingController();
   SubFilter _filter = SubFilter.all;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_navArgs != null) return; // ✅ حتى لا يتكرر
+
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    if (args != null) {
+      _navArgs = args;
+
+      debugPrint("ADMIN SUBSCRIPTIONS → opened from request: $_navArgs");
+
+      // ⬅️ هنا لاحقًا يمكنك:
+      // - highlight الطبيب
+      // - auto scroll
+      // - أو auto open popup
+    }
+  }
 
   @override
   void dispose() {
@@ -39,7 +62,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     final ts = data['subscriptionEnd'];
     if (ts == null || ts is! Timestamp) return active;
 
-    return ts.toDate().isAfter(DateTime.now());
+    return ts.toDate().isAfter(DateTime.now().toUtc());
   }
 
   int? _daysLeft(Map<String, dynamic> data) {
@@ -89,29 +112,23 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
   // --------------------------------------
   Future<void> _updateDoctorSubscription({
     required String doctorUid,
-    required String doctorId,
     required bool active,
     DateTime? end,
     String? plan,
   }) async {
-    final db = FirebaseFirestore.instance;
-    final usersRef = db.collection('users').doc(doctorUid);
-    final subsRef = db.collection('doctor_subscriptions').doc(doctorId);
+    final userRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(doctorUid);
 
-    await db.runTransaction((tx) async {
-      tx.set(usersRef, {
-        'subscriptionActive': active,
-        'subscriptionEnd': end == null ? null : Timestamp.fromDate(end.toUtc()),
-        if (plan != null) 'subscriptionPlan': plan,
-        'subscriptionUpdatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    final endTimestamp = end == null ? null : Timestamp.fromDate(end.toUtc());
 
-      tx.set(subsRef, {
-        'active': active,
-        'end': end == null ? null : Timestamp.fromDate(end.toUtc()),
-        if (plan != null) 'plan': plan,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    await userRef.update({
+      'subscriptionActive': active,
+      'subscriptionEnd': active ? endTimestamp : null,
+      if (plan != null) 'subscriptionType': plan,
+      'subscriptionUpdatedAt': FieldValue.serverTimestamp(),
+      'subscriptionUpdatedBy':
+          FirebaseAuth.instance.currentUser?.uid ?? 'admin',
     });
   }
 
@@ -135,7 +152,6 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
 
     await _updateDoctorSubscription(
       doctorUid: userId,
-      doctorId: doctorId,
       active: true,
       end: end,
       plan: plan ?? 'manual',
@@ -237,7 +253,6 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
 
     await _updateDoctorSubscription(
       doctorUid: userId,
-      doctorId: doctorId,
       active: false,
       end: null,
     );
@@ -247,76 +262,74 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     ).showSnackBar(SnackBar(content: Text(t.deactivated)));
   }
 
-  PopupMenuButton<int> _actionsMenu(
+  Widget _actionsMenu(
+    BuildContext tileContext,
     String userId,
     Map<String, dynamic> data,
     AppLocalizations t,
   ) {
-    final isActiveNow = _isActive(data);
-    final hasDoctorId = (data['doctorId'] ?? '').toString().trim().isNotEmpty;
+    return IconButton(
+      icon: const Icon(Icons.more_vert),
+      onPressed: () async {
+        final RenderBox box = tileContext.findRenderObject() as RenderBox;
+        final Offset position = box.localToGlobal(Offset.zero);
 
-    return PopupMenuButton<int>(
-      onSelected: (value) async {
+        final selected = await showMenu<int>(
+          context: context,
+          position: RelativeRect.fromLTRB(
+            position.dx,
+            position.dy,
+            position.dx + box.size.width,
+            position.dy + box.size.height,
+          ),
+          items: [
+            PopupMenuItem(value: 7, child: Text(t.activate7)),
+            PopupMenuItem(value: 30, child: Text(t.activate30)),
+            PopupMenuItem(value: 90, child: Text(t.activate90)),
+            PopupMenuItem(value: 0, child: Text(t.customActivation)),
+            const PopupMenuDivider(),
+            PopupMenuItem(value: -1, child: Text(t.deactivateSubscription)),
+          ],
+        );
+
+        if (selected == null) return;
+
         try {
-          if (value == 7) {
+          if (selected == 7) {
             await _activateFor(
               userId,
               data,
               duration: const Duration(days: 7),
-              plan: '7d',
               t: t,
+              plan: '7d',
             );
-          } else if (value == 30) {
+          } else if (selected == 30) {
             await _activateFor(
               userId,
               data,
               duration: const Duration(days: 30),
-              plan: '30d',
               t: t,
+              plan: '30d',
             );
-          } else if (value == 90) {
+          } else if (selected == 90) {
             await _activateFor(
               userId,
               data,
               duration: const Duration(days: 90),
-              plan: '90d',
               t: t,
+              plan: '90d',
             );
-          } else if (value == 0) {
+          } else if (selected == 0) {
             await _activateCustomDialog(userId, data, t);
-          } else if (value == -1) {
+          } else if (selected == -1) {
             await _deactivate(userId, data, t);
           }
         } catch (e) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text("${t.actionFailed} $e")));
+          ).showSnackBar(SnackBar(content: Text("${t.actionFailed}: $e")));
         }
       },
-      itemBuilder: (_) => [
-        PopupMenuItem(value: 7, enabled: hasDoctorId, child: Text(t.activate7)),
-        PopupMenuItem(
-          value: 30,
-          enabled: hasDoctorId,
-          child: Text(t.activate30),
-        ),
-        PopupMenuItem(
-          value: 90,
-          enabled: hasDoctorId,
-          child: Text(t.activate90),
-        ),
-        PopupMenuItem(
-          value: 0,
-          enabled: hasDoctorId,
-          child: Text(t.customActivation),
-        ),
-        PopupMenuItem(
-          value: -1,
-          enabled: hasDoctorId && isActiveNow,
-          child: Text(t.deactivateSubscription),
-        ),
-      ],
-      child: const Icon(Icons.more_vert),
     );
   }
 
@@ -467,32 +480,34 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                       color = Colors.orange;
                     }
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.teal.shade100,
-                        child: const Icon(Icons.person, color: Colors.teal),
-                      ),
-                      title: Text(name),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (email.isNotEmpty)
-                            Text(email, textDirection: TextDirection.ltr),
-                          if (doctorId.isNotEmpty)
+                    return Builder(
+                      builder: (tileContext) => ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.teal.shade100,
+                          child: const Icon(Icons.person, color: Colors.teal),
+                        ),
+                        title: Text(name),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (email.isNotEmpty)
+                              Text(email, textDirection: TextDirection.ltr),
+                            if (doctorId.isNotEmpty)
+                              Text(
+                                "doctorId: $doctorId",
+                                style: const TextStyle(fontSize: 12),
+                              ),
                             Text(
-                              "doctorId: $doctorId",
-                              style: const TextStyle(fontSize: 12),
+                              status,
+                              style: TextStyle(
+                                color: color,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          Text(
-                            status,
-                            style: TextStyle(
-                              color: color,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        trailing: _actionsMenu(tileContext, userId, data, t),
                       ),
-                      trailing: _actionsMenu(userId, data, t),
                     );
                   },
                 );

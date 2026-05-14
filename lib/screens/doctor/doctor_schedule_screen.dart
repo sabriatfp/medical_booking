@@ -514,7 +514,7 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  day,
+                                  localizedDayName(context, day),
                                   style: const TextStyle(fontSize: 16),
                                 ),
                               ),
@@ -718,6 +718,29 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
 
     // 4️⃣ تحديث حالة الأيام الممتلئة
     await _updateFullDays();
+  }
+}
+
+String localizedDayName(BuildContext context, String arabicDay) {
+  final t = AppLocalizations.of(context)!;
+
+  switch (arabicDay) {
+    case "الإثنين":
+      return t.monday;
+    case "الثلاثاء":
+      return t.tuesday;
+    case "الأربعاء":
+      return t.wednesday;
+    case "الخميس":
+      return t.thursday;
+    case "الجمعة":
+      return t.friday;
+    case "السبت":
+      return t.saturday;
+    case "الأحد":
+      return t.sunday;
+    default:
+      return arabicDay; // fallback آمن
   }
 }
 
