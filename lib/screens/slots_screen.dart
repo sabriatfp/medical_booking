@@ -205,6 +205,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
           "slotId": slotId,
           "status": "pending",
           "createdAt": FieldValue.serverTimestamp(),
+          "doctorUpdate": true,
         });
       });
 

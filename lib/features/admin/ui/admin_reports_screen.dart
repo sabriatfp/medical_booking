@@ -19,6 +19,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
   DateTimeRange? _dateRange;
   String? _typeFilter;
+  Set<String> _seenReports = {};
 
   @override
   void dispose() {
@@ -176,14 +177,57 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     setState(() => _dateRange = null);
   }
 
+  Future<void> _addReply(String reportId) async {
+    final controller = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Add Reply"),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(hintText: "Write reply..."),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Send"),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true || controller.text.trim().isEmpty) return;
+
+    await FirebaseFirestore.instance.collection('reports').doc(reportId).update(
+      {
+        'reply': controller.text.trim(),
+        'status': 'processed', // ✅ نغلقه مباشرة
+        'replySeen': false, // ✅ مهم جدًا
+      },
+    );
+  }
+
   // تفاصيل البلاغ
   Future<void> _showDetails(
     BuildContext context,
+    String id, // ✅
     Map<String, dynamic> data,
     AppLocalizations t,
   ) async {
     final senderId = (data['senderId'] ?? '').toString();
 
+    /// ✅ mark as read
+    if ((data['status'] ?? 'new') == 'new') {
+      await FirebaseFirestore.instance.collection('reports').doc(id).update({
+        'status': 'processed',
+      });
+    }
     Future<String?> loadEmail() async {
       if (senderId.isEmpty) return null;
       final snap = await FirebaseFirestore.instance
@@ -310,6 +354,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           await _updateStatus(id, 'new', t);
         } else if (v == 'delete') {
           await _deleteReport(id, t);
+        } else if (v == 'reply') {
+          await _addReply(id);
         }
       },
       itemBuilder: (_) => [
@@ -325,6 +371,17 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         ),
         const PopupMenuDivider(),
         PopupMenuItem(value: 'delete', child: Text(t.delete)),
+
+        PopupMenuItem(
+          value: 'reply',
+          child: Row(
+            children: const [
+              Icon(Icons.reply, size: 18),
+              SizedBox(width: 6),
+              Text("Reply"),
+            ],
+          ),
+        ),
       ],
       child: const Icon(Icons.more_vert),
     );
@@ -446,21 +503,26 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
                     final type = (data['type'] ?? t.report).toString();
                     final msg = (data['message'] ?? "").toString();
-                    final sender = (data['senderId'] ?? "").toString();
+
+                    final senderName =
+                        (data['senderName'] ?? "").toString().isNotEmpty
+                        ? data['senderName']
+                        : "Unknown doctor";
+
                     final ts = data['createdAt'];
 
                     final created = ts is Timestamp
                         ? _formatDate(ts.toDate())
                         : t.unknown;
                     final status = (data['status'] ?? 'new').toString();
-
+                    final reply = data['reply'] ?? '';
                     final statusColor = status == 'processed'
                         ? Colors.green
                         : Colors.orange;
                     final statusText = status == 'processed'
                         ? t.processed
                         : t.newReport;
-
+                    final isNew = !_seenReports.contains(id);
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.teal.shade100,
@@ -477,7 +539,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           Text(
-                            "${t.sender}: $sender • $created",
+                            "${t.sender}: $senderName • $created",
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -491,10 +553,50 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+
+                          /// ✅ ✅ ✅ NEW: إذا يوجد رد
+                          if (reply.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                "↳ ${t.replyAdded}",
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
-                      trailing: _rowActions(id, data, t),
-                      onTap: () => _showDetails(context, data, t),
+                      trailing: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _rowActions(id, data, t),
+
+                          /// ✅ النقطة الحمراء
+                          if (status == 'new')
+                            Positioned(
+                              right: -3,
+                              top: -3,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _seenReports.add(id);
+                        });
+
+                        _showDetails(context, id, data, t);
+                      },
                     );
                   },
                 );

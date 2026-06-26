@@ -210,11 +210,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get renewSubscription => 'Renouveler l\'abonnement';
 
   @override
-  String remainingDays(Object days) {
-    return '$days jours restants';
-  }
-
-  @override
   String get lastUpdate => 'Dernière mise à jour';
 
   @override
@@ -709,6 +704,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get confirm => 'Confirmer';
+
+  @override
+  String get deleteAccountWarning =>
+      'Êtes-vous sûr de vouloir supprimer le compte ? Cette action est irréversible.';
+
+  @override
+  String get deleteAccount => 'Supprimer le compte';
 
   @override
   String get chooseAppointment => 'Choisir le rendez-vous';
@@ -1347,4 +1349,91 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get currency => 'DT';
+
+  @override
+  String get subscriptionExpiredDoctor =>
+      'Ce médecin n\'est pas disponible momentanément (abonnement expiré)';
+
+  @override
+  String remainingDays(Object days) {
+    return 'Il reste $days jours';
+  }
+
+  @override
+  String get appointmentDetails => 'Détails du rendez-vous';
+
+  @override
+  String get callPatient => 'Appeler le patient';
+
+  @override
+  String get doctorNotes => 'Notes du médecin';
+
+  @override
+  String get visitType => 'Type de visite';
+
+  @override
+  String get consultation => 'Consultation';
+
+  @override
+  String get review => 'Contrôle';
+
+  @override
+  String get checkup => 'Examen';
+
+  @override
+  String get enterData => 'Veuillez saisir des données';
+
+  @override
+  String get hasReport => 'Rapport موجود';
+
+  @override
+  String get myReports => 'Mes signalements';
+
+  @override
+  String get openReports => 'Signalements ouverts';
+
+  @override
+  String get sendReport => 'Envoyer un signalement';
+
+  @override
+  String get bug => 'Bug';
+
+  @override
+  String get complaint => 'Réclamation';
+
+  @override
+  String get suggestion => 'Suggestion';
+
+  @override
+  String get describeProblem => 'Décrivez le problème...';
+
+  @override
+  String get send => 'Envoyer';
+
+  @override
+  String get noReports => 'Aucun signalement pour le moment';
+
+  @override
+  String get invalidInput => 'Veuillez saisir un message';
+
+  @override
+  String get reportSentSuccessfully => 'Signalement envoyé avec succès';
+
+  @override
+  String get payment => 'Paiement';
+
+  @override
+  String get contactUs => 'Contactez-nous';
+
+  @override
+  String get replyAdded => 'Réponse ajoutée';
+
+  @override
+  String get adminReply => 'Réponse de l\'administration :';
+
+  @override
+  String get english => 'Anglais';
+
+  @override
+  String get appDescription => 'Application de prise de rendez-vous médicaux.';
 }

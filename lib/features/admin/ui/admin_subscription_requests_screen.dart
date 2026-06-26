@@ -131,19 +131,7 @@ class AdminSubscriptionRequestsScreen extends StatelessWidget {
                               label: Text(t.activate),
                               onPressed: () async {
                                 // ✅ نغلق الطلب (اختياري: يمكنك تأجيله)
-                                await FirebaseFirestore.instance
-                                    .collection('subscription_requests')
-                                    .doc(doc.id)
-                                    .update({
-                                      'status': 'processed',
-                                      'processedAt':
-                                          FieldValue.serverTimestamp(),
-                                      'processedBy': 'admin',
-                                    });
 
-                                if (!context.mounted) return;
-
-                                // ✅ ننتقل مباشرة لصفحة إدارة الاشتراكات
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -154,6 +142,7 @@ class AdminSubscriptionRequestsScreen extends StatelessWidget {
                                         'doctorUid': data['doctorUid'],
                                         'doctorId': data['doctorId'],
                                         'doctorName': data['doctorName'],
+                                        'requestId': doc.id, // ✅ مهم جدًا
                                       },
                                     ),
                                   ),

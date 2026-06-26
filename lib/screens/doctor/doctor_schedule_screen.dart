@@ -687,6 +687,32 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     );
   }
 
+  void _refreshWeeksSlots() {
+    if (slotDuration == null) return;
+
+    for (var w in weeks) {
+      for (var day in w["days"]) {
+        final dateStr = day["date"];
+        final date = DateTime.parse(dateStr);
+        final dayName = weekDays[date.weekday - 1];
+        final tmpl = weeklyTemplate[dayName];
+
+        if (tmpl == null || tmpl["available"] != true) {
+          day["slots"] = [];
+          continue;
+        }
+
+        final start = tmpl["start"];
+        final end = tmpl["end"];
+
+        day["start"] = start;
+        day["end"] = end;
+
+        day["slots"] = generateSlots(start, end, slotDuration!);
+      }
+    }
+  }
+
   // ---------------------------------------------
   // حفظ weeks + weeklyTemplate + slotDuration
   // ---------------------------------------------
@@ -694,6 +720,8 @@ class _DoctorScheduleScreenState extends State<DoctorScheduleScreen> {
     final t = AppLocalizations.of(context)!;
     final doctorId = _resolvedDoctorId;
     if (doctorId == null) return;
+
+    _refreshWeeksSlots();
 
     // 1️⃣ حفظ الإعدادات التي عدّلها الطبيب
     await FirebaseFirestore.instance.collection('doctors').doc(doctorId).set({

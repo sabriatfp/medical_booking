@@ -12,6 +12,8 @@ class SignUpScreen extends StatefulWidget {
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
+const double kSpace = 14;
+
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
 
@@ -233,7 +235,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ? t.enterValidName
                             : null,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: kSpace),
 
                       // البريد
                       TextFormField(
@@ -246,7 +248,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: kSpace),
 
                       // كلمة المرور
                       TextFormField(
@@ -257,7 +259,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ? t.enterValidPassword
                             : null,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: kSpace),
 
                       // تأكيد كلمة المرور
                       TextFormField(
@@ -267,9 +269,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         validator: (v) =>
                             v != password.text ? t.passwordsNotMatch : null,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: kSpace),
 
-                      // الهاتف (إجباري للمريض)
+                      // الهاتف
                       TextFormField(
                         controller: phone,
                         decoration: _dec(t.phoneNumber, Icons.phone),
@@ -285,9 +287,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
 
                       if (!isPatient) ...[
+                        const SizedBox(height: kSpace),
+
                         // الاختصاص
                         DropdownButtonFormField<String>(
                           value: selectedSpecialtyId,
+                          isExpanded: true,
                           decoration: _dec(t.specialty, Icons.medical_services),
                           items: specialties.map((doc) {
                             final d = doc.data() as Map<String, dynamic>;
@@ -302,11 +307,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               v == null ? t.chooseSpecialty : null,
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: kSpace),
 
                         // الولاية
                         DropdownButtonFormField<String>(
                           value: selectedGovernorateId,
+                          isExpanded: true,
                           decoration: _dec(t.governorate, Icons.location_on),
                           items: governorates.map((doc) {
                             final d = doc.data() as Map<String, dynamic>;
@@ -321,18 +327,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               v == null ? t.chooseGovernorate : null,
                         ),
 
-                        const SizedBox(height: 12),
-
-                        // الهاتف
-                        // TextFormField(
-                        // controller: phone,
-                        //  decoration: _dec(t.phoneNumber, Icons.phone),
-                        //  keyboardType: TextInputType.phone,
-                        //  validator: (v) => (v == null || v.trim().length < 6)
-                        //     ? t.enterValidPhone
-                        //    : null,
-                        // ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: kSpace),
 
                         // العنوان
                         TextFormField(
@@ -344,12 +339,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                       ],
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: kSpace),
 
                       if (error != null)
                         Text(error!, style: const TextStyle(color: Colors.red)),
 
-                      const SizedBox(height: 8),
+                      const SizedBox(height: kSpace),
 
                       SizedBox(
                         width: double.infinity,

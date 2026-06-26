@@ -478,12 +478,6 @@ abstract class AppLocalizations {
   /// **'تجديد الاشتراك'**
   String get renewSubscription;
 
-  /// No description provided for @remainingDays.
-  ///
-  /// In ar, this message translates to:
-  /// **'متبقي {days} يوم'**
-  String remainingDays(Object days);
-
   /// No description provided for @lastUpdate.
   ///
   /// In ar, this message translates to:
@@ -1461,6 +1455,18 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'تأكيد'**
   String get confirm;
+
+  /// No description provided for @deleteAccountWarning.
+  ///
+  /// In ar, this message translates to:
+  /// **'هل أنت متأكد من حذف الحساب؟ لا يمكن التراجع عن هذه العملية.'**
+  String get deleteAccountWarning;
+
+  /// No description provided for @deleteAccount.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف الحساب'**
+  String get deleteAccount;
 
   /// No description provided for @chooseAppointment.
   ///
@@ -2709,6 +2715,174 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'دت'**
   String get currency;
+
+  /// No description provided for @subscriptionExpiredDoctor.
+  ///
+  /// In ar, this message translates to:
+  /// **'هذا الطبيب غير متاح مؤقتًا لانتهاء الاشتراك'**
+  String get subscriptionExpiredDoctor;
+
+  /// No description provided for @remainingDays.
+  ///
+  /// In ar, this message translates to:
+  /// **'متبقي {days} يوم'**
+  String remainingDays(Object days);
+
+  /// No description provided for @appointmentDetails.
+  ///
+  /// In ar, this message translates to:
+  /// **'تفاصيل الموعد '**
+  String get appointmentDetails;
+
+  /// No description provided for @callPatient.
+  ///
+  /// In ar, this message translates to:
+  /// **'اتصال بالمريض'**
+  String get callPatient;
+
+  /// No description provided for @doctorNotes.
+  ///
+  /// In ar, this message translates to:
+  /// **'ملاحظات الطبيب'**
+  String get doctorNotes;
+
+  /// No description provided for @visitType.
+  ///
+  /// In ar, this message translates to:
+  /// **'نوع الموعد'**
+  String get visitType;
+
+  /// No description provided for @consultation.
+  ///
+  /// In ar, this message translates to:
+  /// **'استشارة'**
+  String get consultation;
+
+  /// No description provided for @review.
+  ///
+  /// In ar, this message translates to:
+  /// **'مراجعة'**
+  String get review;
+
+  /// No description provided for @checkup.
+  ///
+  /// In ar, this message translates to:
+  /// **'فحص'**
+  String get checkup;
+
+  /// No description provided for @enterData.
+  ///
+  /// In ar, this message translates to:
+  /// **'الرجاء إدخال بيانات'**
+  String get enterData;
+
+  /// No description provided for @hasReport.
+  ///
+  /// In ar, this message translates to:
+  /// **'يوجد تقرير'**
+  String get hasReport;
+
+  /// No description provided for @myReports.
+  ///
+  /// In ar, this message translates to:
+  /// **'تقاريري'**
+  String get myReports;
+
+  /// No description provided for @openReports.
+  ///
+  /// In ar, this message translates to:
+  /// **'التقارير المفتوحة'**
+  String get openReports;
+
+  /// No description provided for @sendReport.
+  ///
+  /// In ar, this message translates to:
+  /// **'إرسال تقرير'**
+  String get sendReport;
+
+  /// No description provided for @bug.
+  ///
+  /// In ar, this message translates to:
+  /// **'خلل'**
+  String get bug;
+
+  /// No description provided for @complaint.
+  ///
+  /// In ar, this message translates to:
+  /// **'شكوى'**
+  String get complaint;
+
+  /// No description provided for @suggestion.
+  ///
+  /// In ar, this message translates to:
+  /// **'اقتراح'**
+  String get suggestion;
+
+  /// No description provided for @describeProblem.
+  ///
+  /// In ar, this message translates to:
+  /// **'صف المشكلة...'**
+  String get describeProblem;
+
+  /// No description provided for @send.
+  ///
+  /// In ar, this message translates to:
+  /// **'إرسال'**
+  String get send;
+
+  /// No description provided for @noReports.
+  ///
+  /// In ar, this message translates to:
+  /// **'لا توجد تقارير بعد'**
+  String get noReports;
+
+  /// No description provided for @invalidInput.
+  ///
+  /// In ar, this message translates to:
+  /// **'يرجى إدخال رسالة'**
+  String get invalidInput;
+
+  /// No description provided for @reportSentSuccessfully.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم إرسال التقرير بنجاح'**
+  String get reportSentSuccessfully;
+
+  /// No description provided for @payment.
+  ///
+  /// In ar, this message translates to:
+  /// **'الدفع'**
+  String get payment;
+
+  /// No description provided for @contactUs.
+  ///
+  /// In ar, this message translates to:
+  /// **'اتصل بنا'**
+  String get contactUs;
+
+  /// No description provided for @replyAdded.
+  ///
+  /// In ar, this message translates to:
+  /// **'تمت إضافة الرد'**
+  String get replyAdded;
+
+  /// No description provided for @adminReply.
+  ///
+  /// In ar, this message translates to:
+  /// **'رد الإدارة:'**
+  String get adminReply;
+
+  /// No description provided for @english.
+  ///
+  /// In ar, this message translates to:
+  /// **'الإنجليزية'**
+  String get english;
+
+  /// No description provided for @appDescription.
+  ///
+  /// In ar, this message translates to:
+  /// **'تطبيق لحجز المواعيد الطبية.'**
+  String get appDescription;
 }
 
 class _AppLocalizationsDelegate

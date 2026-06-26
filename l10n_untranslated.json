@@ -1,4 +1,11 @@
 {
+  "en": [
+    "subscriptionExpiredDoctor",
+    "openReports",
+    "noReports",
+    "invalidInput"
+  ],
+
   "fr": [
     "filter"
   ]

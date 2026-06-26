@@ -324,7 +324,7 @@ class _DaysOffScreenState extends State<DaysOffScreen> {
             const Divider(height: 32),
 
             Align(
-              alignment: Alignment.centerRight,
+              // alignment: Alignment.centerRight,
               child: Text(
                 t.savedDaysOff,
                 style: const TextStyle(fontWeight: FontWeight.bold),

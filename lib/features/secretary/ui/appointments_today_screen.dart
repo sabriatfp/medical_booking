@@ -116,98 +116,141 @@ class _AppointmentsTodayScreenState extends State<AppointmentsTodayScreen> {
                       status == 'confirmed');
 
               return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: statusColor.withOpacity(.15),
-                    child: Icon(Icons.person, color: statusColor),
-                  ),
+                margin: const EdgeInsets.symmetric(vertical: 6),
 
-                  title: Row(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          patientName,
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                      // =========================
+                      // ✅ السطر 1: الاسم
+                      // =========================
+                      Text(
+                        patientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
                         ),
                       ),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(.12),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          _statusLabel(status, t),
-                          style: TextStyle(
-                            color: statusColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+
+                      const SizedBox(height: 8),
+
+                      // =========================
+                      // ✅ السطر 2: الوقت + الأزرار
+                      // =========================
+                      Row(
+                        children: [
+                          // ✅ الوقت (يسار في FR / يمين في AR تلقائيًا)
+                          Expanded(
+                            child: Text(
+                              "${t.time}: $timeLabel",
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           ),
-                        ),
+
+                          // ✅ الأزرار (على اليمين)
+                          if (widget.asSecretary)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (canCheckIn)
+                                  _miniBtn(
+                                    label: t.checkIn,
+                                    color: Colors.blue,
+                                    onTap: () async {
+                                      final amount = await _askPaidAmount(
+                                        context,
+                                      );
+                                      if (amount == null) return;
+
+                                      try {
+                                        await DoctorService()
+                                            .checkInAppointment(
+                                              appointmentId: ref.id,
+                                              doctorId: widget.doctorId,
+                                              patientId: d['patientId'],
+                                              amount: amount,
+                                            );
+
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(content: Text(t.checkedIn)),
+                                        );
+                                      } catch (e) {
+                                        _showError(context, e, t);
+                                      }
+                                    },
+                                  ),
+
+                                const SizedBox(width: 4),
+
+                                if (canNoShow)
+                                  _miniBtn(
+                                    label: t.noShow,
+                                    color: Colors.deepOrange,
+                                    onTap: () async {
+                                      try {
+                                        await _updateStatus(ref.id, 'no_show');
+
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(content: Text(t.noShowSet)),
+                                        );
+                                      } catch (e) {
+                                        _showError(context, e, t);
+                                      }
+                                    },
+                                  ),
+                              ],
+                            ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      // =========================
+                      // ✅ السطر 3: الهاتف + الحالة
+                      // =========================
+                      Row(
+                        children: [
+                          // ✅ الهاتف
+                          Expanded(
+                            child: Text(
+                              "${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}",
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+
+                          // ✅ الحالة (تحت الأزرار)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(.12),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Text(
+                              _statusLabel(status, t),
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      "${t.time}: $timeLabel • "
-                      "${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}",
-                    ),
-                  ),
-
-                  trailing: widget.asSecretary
-                      ? Wrap(
-                          spacing: 6,
-                          children: [
-                            if (canCheckIn)
-                              _miniBtn(
-                                label: t.checkIn,
-                                color: Colors.blue,
-                                onTap: () async {
-                                  final amount = await _askPaidAmount(context);
-                                  if (amount == null) return;
-
-                                  try {
-                                    await DoctorService().checkInAppointment(
-                                      appointmentId: ref.id,
-                                      doctorId: widget.doctorId,
-                                      patientId: d['patientId'],
-                                      amount: amount,
-                                    );
-
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(t.checkedIn)),
-                                    );
-                                  } catch (e) {
-                                    _showError(context, e, t);
-                                  }
-                                },
-                              ),
-
-                            if (canNoShow)
-                              _miniBtn(
-                                label: t.noShow,
-                                color: Colors.deepOrange,
-                                onTap: () async {
-                                  try {
-                                    await _updateStatus(ref.id, 'no_show');
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(t.noShowSet)),
-                                    );
-                                  } catch (e) {
-                                    _showError(context, e, t);
-                                  }
-                                },
-                              ),
-                          ],
-                        )
-                      : null,
                 ),
               );
             },

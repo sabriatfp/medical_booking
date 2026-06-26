@@ -433,8 +433,32 @@
   "amountHint": "Amount",
   "currency": "TND",
 "tapToChoose": "Tap to choose",
-"cannotConfirmPastAppointment": "Cannot confirm an appointment on a past date"
-
+"cannotConfirmPastAppointment": "Cannot confirm an appointment on a past date",
+  "deleteAccountWarning": "Are you sure you want to delete the account? This action cannot be undone.",
+  "deleteAccount": "Delete Account",
+"appointmentDetails": "Appointment details",
+"callPatient": "Call patient",
+"doctorNotes": "Doctor notes",
+"visitType": "Visit type",
+"consultation": "Consultation",
+"review": "Review",
+"checkup": "Check-up",
+"enterData": "Please enter data",
+"hasReport": "Has report",
+"payment": "Payment",
+"contactUs": "Contact Us",
+"myReports": "My Reports",
+"replyAdded": "Reply added",
+"bug": "Bug",
+"complaint": "Complaint",
+"suggestion": "Suggestion",
+"adminReply": "Admin reply:",
+"sendReport": " Send Report",
+"describeProblem": "Describe the issue...",
+"send": "Send",
+"reportSentSuccessfully": "Report sent successfully",
+"english": "English",
+"appDescription": "Medical appointment booking application."
 
 
 }

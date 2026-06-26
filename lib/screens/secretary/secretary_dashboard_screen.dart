@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:medical_booking/providers/language_provider.dart';
+import 'package:provider/provider.dart';
 
 // شاشات السكريتير/الطبيب
 import 'package:medical_booking/features/secretary/ui/appointments_today_screen.dart';
@@ -15,7 +17,6 @@ const Color kBrandColor = Color(0xFF0ABAB5);
 class SecretaryDashboardScreen extends StatefulWidget {
   final String doctorId;
   const SecretaryDashboardScreen({super.key, required this.doctorId});
-
   @override
   State<SecretaryDashboardScreen> createState() =>
       _SecretaryDashboardScreenState();
@@ -24,10 +25,14 @@ class SecretaryDashboardScreen extends StatefulWidget {
 class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
   int _current = 1; // يبدأ على "مواعيد اليوم"
   late final List<_Tab> _tabs;
-
+  bool _sessionActive = true;
+  String? doctorId;
   @override
   void initState() {
     super.initState();
+
+    doctorId = widget.doctorId; // ✅ مهم جدًا
+    loadDoctorName(); // ✅ استدعاء الدالة
 
     _tabs = [
       _Tab(
@@ -86,6 +91,18 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
     return true;
   }
 
+  String doctorName = "";
+
+  Future<void> loadDoctorName() async {
+    final doc = await FirebaseFirestore.instance
+        .collection("doctors")
+        .doc(doctorId)
+        .get();
+
+    doctorName = doc.data()?['name'] ?? '';
+    setState(() {});
+  }
+
   Future<void> _logoutSecretary(BuildContext context) async {
     final auth = FirebaseAuth.instance;
     final user = auth.currentUser;
@@ -94,31 +111,45 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
 
     final db = FirebaseFirestore.instance;
 
-    // 1️⃣ سحب صلاحيات السكريتير (الأهم)
-    await db.collection('users').doc(user.uid).update({
-      'activeSecretaryDoctorId': FieldValue.delete(),
-    });
+    try {
+      // 1️⃣ حذف صلاحيات السكريتير
+      await db.collection('users').doc(user.uid).update({
+        'activeSecretaryDoctorId': FieldValue.delete(),
+      });
 
-    // 2️⃣ إغلاق session النشطة (اختياري لكنه ممتاز)
-    final sessions = await db
-        .collection('secretary_sessions')
-        .where('secretaryUid', isEqualTo: user.uid)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
+      // 2️⃣ إغلاق الجلسة
+      final sessions = await db
+          .collection('secretary_sessions')
+          .where('secretaryUid', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
 
-    if (sessions.docs.isNotEmpty) {
-      await sessions.docs.first.reference.update({
-        'status': 'closed',
-        'endedAt': FieldValue.serverTimestamp(),
+      if (sessions.docs.isNotEmpty) {
+        await sessions.docs.first.reference.update({
+          'status': 'closed',
+          'endedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      print("❌ LOGOUT ERROR: $e");
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error during logout: $e")));
+    }
+
+    // 🔴 يكمل الخروج حتى لو فشل update
+    if (mounted) {
+      setState(() {
+        _sessionActive = false;
       });
     }
 
-    // 3️⃣ Logout من Firebase Auth
     await auth.signOut();
 
-    // 4️⃣ الرجوع لشاشة Login
     if (!mounted) return;
+
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
   }
 
@@ -137,15 +168,62 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
             elevation: 0,
             backgroundColor: kBrandColor,
             centerTitle: true,
-            title: Text(
-              t.secretarySpace,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
+
+            title: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ✅ العنوان الرئيسي
+                Text(
+                  t.secretarySpace,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                // ✅ اسم الطبيب
+                Text(
+                  "${t.doctor} $doctorName",
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
+
             automaticallyImplyLeading: false,
+
             actions: [
+              // ✅ زر تغيير اللغة
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.language, color: Colors.white),
+                tooltip: t.changeLanguage,
+
+                onSelected: (langCode) {
+                  final langProvider = Provider.of<LanguageProvider>(
+                    context,
+                    listen: false,
+                  );
+
+                  langProvider.changeLanguage(langCode); // ✅ الحل الحقيقي
+                },
+
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'ar', child: Text('العربية 🇸🇦')),
+                  const PopupMenuItem(
+                    value: 'fr',
+                    child: Text('Français 🇫🇷'),
+                  ),
+                  const PopupMenuItem(value: 'en', child: Text('English 🇬🇧')),
+                ],
+              ),
+
+              // ✅ زر الخروج
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.white),
                 tooltip: t.logout,
@@ -156,10 +234,14 @@ class _SecretaryDashboardScreenState extends State<SecretaryDashboardScreen> {
             ],
           ),
 
-          body: IndexedStack(
-            index: _current,
-            children: _tabs.map((t) => _KeepAlive(child: t.builder())).toList(),
-          ),
+          body: _sessionActive
+              ? IndexedStack(
+                  index: _current,
+                  children: _tabs
+                      .map((t) => _KeepAlive(child: t.builder()))
+                      .toList(),
+                )
+              : const SizedBox.shrink(),
 
           bottomNavigationBar: BottomNavigationBar(
             currentIndex: _current,

@@ -253,11 +253,14 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
     final t = AppLocalizations.of(context)!;
     final appointments = await _fetchAppointmentsForDay(date);
     final notesController = TextEditingController(text: data['notes'] ?? "");
-
+    final locale = Localizations.localeOf(context).toString();
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text("${t.dayDetails} ${DateFormat('dd MMMM').format(date)}"),
+        title: Text(
+          "${t.dayDetails} ${DateFormat('dd MMMM yyyy', locale).format(date)}",
+        ),
+
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
@@ -332,7 +335,7 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
-
+    final locale = Localizations.localeOf(context).toString();
     if (_loading)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
@@ -359,11 +362,7 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
     return Scaffold(
       appBar: widget.hideInnerHeader
           ? null
-          : AppBar(
-              title: Text(
-                "${t.doctorCalendar} (${DateFormat.MMMM().format(_selectedMonth)})",
-              ),
-            ),
+          : AppBar(title: Text("${t.doctorCalendar} ")),
       body: Column(
         children: [
           _buildStatsBar(),
@@ -377,8 +376,9 @@ class _DoctorCalendarScreenState extends State<DoctorCalendarScreen> {
                   icon: const Icon(Icons.arrow_back),
                   tooltip: t.prevMonth,
                 ),
+
                 Text(
-                  DateFormat('MMMM yyyy').format(_selectedMonth),
+                  DateFormat('MMMM yyyy', locale).format(_selectedMonth),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

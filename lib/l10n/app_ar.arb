@@ -44,11 +44,9 @@
   "close": "إغلاق",
   "prevMonth": "الشهر السابق",
   "nextMonth": "الشهر التالي",
-
   "doctorIdNotFound": "لم يتم العثور على معرف الطبيب",
   "errorFindingDoctor": "حدث خطأ أثناء تحديد الطبيب",
   "errorFindingDoctorId": "تعذر العثور على معرف الطبيب",
-
   "financeDashboard": "اللوحة المالية",
   "revenueSummary": "ملخص الأرباح",
   "todayRevenue": "دخل اليوم",
@@ -64,7 +62,6 @@
   "subscriptionEndsAt": "ينتهي في",
   "subscriptionExpiringSoon": "سينتهي الاشتراك قريبًا — يُنصح بالتجديد.",
   "renewSubscription": "تجديد الاشتراك",
-  "remainingDays": "متبقي {days} يوم",
   "lastUpdate": "آخر تحديث",
   "comingSoon": "سيتم إضافة بوابة الدفع قريبًا",
   "daysOff": "أيام الغياب",
@@ -246,7 +243,8 @@
   "delete": "حذف",
   "cancel": "إلغاء",
   "confirm": "تأكيد",
-  
+  "deleteAccountWarning": "هل أنت متأكد من حذف الحساب؟ لا يمكن التراجع عن هذه العملية.",
+  "deleteAccount": "حذف الحساب",
   "chooseAppointment": "اختيار الموعد",
   "loadingAppointments": "جاري تحميل المواعيد...",
 "loadingTakingLong": "التحميل يستغرق وقتاً...",
@@ -454,10 +452,41 @@
   "no": "تراجع",  
  "enterPaidAmount": "إدخال المبلغ المدفوع",
   "amountHint": "المبلغ",
-  "currency": "دت"
+  "currency": "دت",
+  "subscriptionExpiredDoctor": "هذا الطبيب غير متاح مؤقتًا لانتهاء الاشتراك",
 
-
-
+"remainingDays": "متبقي {days} يوم",
+"@remainingDays": {
+  "placeholders": {
+    "days": {}
+  }
+},
+"appointmentDetails": "تفاصيل الموعد ",
+"callPatient": "اتصال بالمريض",
+"doctorNotes": "ملاحظات الطبيب",
+"visitType": "نوع الموعد",
+"consultation": "استشارة",
+"review": "مراجعة",
+"checkup": "فحص",
+"enterData": "الرجاء إدخال بيانات",
+"hasReport": "يوجد تقرير",
+"myReports": "تقاريري",
+  "openReports": "التقارير المفتوحة",
+  "sendReport": "إرسال تقرير",
+  "bug": "خلل",
+  "complaint": "شكوى",
+  "suggestion": "اقتراح",
+  "describeProblem": "صف المشكلة...",
+  "send": "إرسال",
+  "noReports": "لا توجد تقارير بعد",
+  "invalidInput": "يرجى إدخال رسالة",
+  "reportSentSuccessfully": "تم إرسال التقرير بنجاح",
+  "payment": "الدفع",
+  "contactUs": "اتصل بنا",
+  "replyAdded": "تمت إضافة الرد",
+  "adminReply": "رد الإدارة:",
+  "english": "الإنجليزية",
+  "appDescription": "تطبيق لحجز المواعيد الطبية."
 
 
 }

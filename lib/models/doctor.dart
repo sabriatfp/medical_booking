@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Doctor {
   final String id;
 
@@ -16,7 +18,8 @@ class Doctor {
 
   final double rating;
   final double? price;
-
+  final DateTime? subscriptionEnd;
+  final DateTime? gracePeriodEnd;
   final bool isAvailable;
   final bool isPriceVisible;
   final bool subscriptionActive;
@@ -36,6 +39,8 @@ class Doctor {
     required this.phone,
     required this.address,
     required this.subscriptionActive,
+    this.subscriptionEnd,
+    this.gracePeriodEnd,
     required this.rating,
     this.price,
 
@@ -76,6 +81,13 @@ class Doctor {
       address: asString(data['address']),
 
       subscriptionActive: data['subscriptionActive'] ?? true,
+
+      subscriptionEnd: data['subscriptionEnd'] != null
+          ? (data['subscriptionEnd'] as Timestamp).toDate()
+          : null,
+      gracePeriodEnd: data['gracePeriodEnd'] != null
+          ? (data['gracePeriodEnd'] as Timestamp).toDate()
+          : null,
 
       rating: asDouble(data['rating']),
       price: data['price'] == null ? null : asDouble(data['price']),

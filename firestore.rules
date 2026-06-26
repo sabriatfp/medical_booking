@@ -45,8 +45,10 @@ service cloud.firestore {
 
     match /users/{uid} {
 
-      allow get, read: if isSignedIn()
-        && (request.auth.uid == uid || isAdmin());
+      
+allow get: if isSignedIn()
+  && (request.auth.uid == uid || isAdmin());
+
 
       allow list: if isAdmin();
 
@@ -61,8 +63,11 @@ service cloud.firestore {
           'photoUrl',
           'phone',
           'fcmTokens',
-          'lastLoginAt'
-        ]);
+          'lastLoginAt',
+          'subscriptionNotificationSeen',
+          'activeSecretaryDoctorId' // ✅ أضف هذا
+
+        ])
 
       // ✅ الأدمن فقط يعدّل الاشتراك / الدور
       allow update: if isAdmin();
@@ -310,14 +315,20 @@ allow update: if
     && userRole(request.auth.uid) == 'doctor'
     && userDoc(request.auth.uid).data.doctorId == resource.data.doctorId
   )
+  // ✅ المريض يلغي موعده أو يزيل الإشعار فقط
+|| (
+  isSignedIn()
+  && resource.data.patientId == request.auth.uid
+    && (
+      // ✅ إلغاء الموعد
+      request.resource.data.status == 'canceled'
 
-  // ✅ المريض يلغي موعده فقط
-  || (
-    isSignedIn()
-    && resource.data.patientId == request.auth.uid
-    && request.resource.data.status == 'canceled'
-  )
-
+      // ✅ إزالة patientUpdate فقط
+      || request.resource.data.diff(resource.data)
+           .changedKeys()
+           .hasOnly(['patientUpdate'])
+    )
+)
   // ✅ السكرتير
   || hasActiveSecretarySession(resource.data.doctorId);
 
@@ -413,20 +424,35 @@ match /doctor_days/{doctorId}/days/{dayId} {
 
 
 
-    /* ============================= */
-    /* reports                       */
-    /* ============================= */
+   /* ============================= */
+/* reports                       */
+/* ============================= */
 
-    match /reports/{id} {
+match /reports/{id} {
 
-      allow get, list: if isAdmin()
-        || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+  // ✅ Admin يرى الجميع + Doctor يرى فقط بلاغاته
+  allow get, list: if isAdmin()
+    || (
+      isSignedIn() &&
+      resource.data.senderId == request.auth.uid
+    );
 
-      allow create: if isSignedIn()
-        && request.resource.data.createdBy == request.auth.uid;
+  // ✅ أي مستخدم يسجل بلاغ لنفسه
+  allow create: if isSignedIn()
+    && request.resource.data.senderId == request.auth.uid;
 
-      allow update, delete: if isAdmin();
-    }
+  // ✅ فقط Admin يعدل (الرد + الحالة)
+ allow update: if isAdmin()
+  || (
+    isSignedIn()
+    && request.auth.uid == resource.data.senderId
+    && request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['replySeen'])  // ✅ يسمح فقط بهذا الحقل
+  );
+
+  // ✅ فقط Admin يحذف
+  allow delete: if isAdmin();
+}
 
     /* ============================= */
     /* read-only                     */

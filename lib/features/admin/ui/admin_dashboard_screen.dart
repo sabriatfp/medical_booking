@@ -6,6 +6,9 @@ import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:medical_booking/features/admin/ui/admin_subscriptions_screen.dart';
 import 'package:medical_booking/features/admin/ui/admin_reports_screen.dart';
 import 'package:medical_booking/features/admin/ui/admin_subscription_requests_screen.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/language_provider.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -20,6 +23,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String? _uid;
   bool _syncing = false;
   bool _permissionHandled = false;
+  int _lastAdminCount = 0;
+  int _lastReportsCount = 0;
 
   @override
   void initState() {
@@ -43,7 +48,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .get(const GetOptions(source: Source.server));
+          .get();
 
       final role = snap.data()?['role'];
 
@@ -123,7 +128,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         title: Text(t.adminDashboard),
 
         actions: [
-          // ✅ زر تسجيل الخروج (للجميع)
+          /// ✅ زر الترجمة
+          IconButton(
+            tooltip: t.changeLanguage,
+            icon: const Icon(Icons.language),
+            onPressed: () => _showLanguageDialog(context),
+          ),
+
+          /// ✅ تسجيل الخروج
           IconButton(
             tooltip: t.logout,
             icon: const Icon(Icons.logout),
@@ -141,28 +153,206 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         itemBuilder: (_, index) {
           final it = items[index];
 
-          return Card(
-            elevation: 1.5,
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.teal.shade100,
-                child: Icon(it.icon, color: Colors.teal),
+          /// ✅ إذا هذا هو كارت الطلبات
+          final isRequests = it.title == t.subscriptionRequests;
+          final isReports = it.title == t.reports;
+          if (isRequests || isReports) {
+            return StreamBuilder<QuerySnapshot>(
+              stream: isReports
+                  ? FirebaseFirestore.instance
+                        .collection('reports')
+                        .where('status', isEqualTo: 'new')
+                        .snapshots()
+                  : FirebaseFirestore.instance
+                        .collection('subscription_requests')
+                        .where('status', isEqualTo: 'pending')
+                        .snapshots(),
+              builder: (context, snapshot) {
+                int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+                /// ✅ تشغيل الصوت عند زيادة الطلبات
+                if (isReports) {
+                  if (_lastReportsCount == 0 && count > 0) {
+                    _playNotificationSound();
+                  }
+
+                  if (count > _lastReportsCount) {
+                    _playNotificationSound();
+                  }
+
+                  _lastReportsCount = count;
+                } else {
+                  if (_lastAdminCount == 0 && count > 0) {
+                    _playNotificationSound();
+                  }
+
+                  if (count > _lastAdminCount) {
+                    _playNotificationSound();
+                  }
+
+                  _lastAdminCount = count;
+                }
+
+                return Card(
+                  elevation: 1.5,
+                  child: Stack(
+                    children: [
+                      /// ✅ الكارت
+                      ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.teal.shade100,
+                          child: Icon(it.icon, color: Colors.teal),
+                        ),
+                        title: Text(
+                          it.title,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(it.subtitle),
+
+                        /// ✅ السهم فقط
+                        trailing: const Icon(Icons.chevron_right),
+
+                        onTap: _isAdmin
+                            ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: it.builder),
+                              )
+                            : null,
+                      ),
+
+                      /// ✅ ✅ الجرس
+                      if (count > 0)
+                        Positioned(
+                          right: 32,
+                          top: 10,
+                          child: _adminBadge(count),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            );
+          } else {
+            return Card(
+              elevation: 1.5,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.teal.shade100,
+                  child: Icon(it.icon, color: Colors.teal),
+                ),
+                title: Text(
+                  it.title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(it.subtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _isAdmin
+                    ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: it.builder),
+                      )
+                    : null,
               ),
-              title: Text(
-                it.title,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(it.subtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _isAdmin
-                  ? () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: it.builder),
-                    )
-                  : null,
-            ),
-          );
+            );
+          }
         },
+      ),
+    );
+  }
+
+  final AudioPlayer _player = AudioPlayer();
+
+  Future<void> _playNotificationSound() async {
+    try {
+      await _player.play(AssetSource('sounds/notification.mp3'));
+    } catch (e) {
+      debugPrint("Sound error: $e");
+    }
+  }
+
+  Widget _adminBadge(int count) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.notifications, color: Colors.red, size: 20),
+        Positioned(
+          right: -4,
+          top: -4,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.red, width: 1),
+            ),
+            child: Text(
+              count > 9 ? '9+' : count.toString(),
+              style: const TextStyle(
+                fontSize: 9,
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showLanguageDialog(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+    final provider = Provider.of<LanguageProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Center(
+          child: Text(
+            t.chooseLanguage,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            /// 🇸🇦 العربية
+            TextButton(
+              onPressed: () {
+                provider.changeLanguage('ar');
+                Navigator.pop(context);
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [const Text("🇸🇦 "), Text(t.arabic)],
+              ),
+            ),
+
+            /// 🇫🇷 الفرنسية
+            TextButton(
+              onPressed: () {
+                provider.changeLanguage('fr');
+                Navigator.pop(context);
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [const Text("🇫🇷 "), Text(t.french)],
+              ),
+            ),
+
+            /// 🇬🇧 الإنجليزية
+            TextButton(
+              onPressed: () {
+                provider.changeLanguage('en');
+                Navigator.pop(context);
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [const Text("🇬🇧 "), Text(t.english)],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

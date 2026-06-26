@@ -180,19 +180,57 @@ class _DoctorsFilterScreenState extends State<DoctorsFilterScreen> {
                           padding: const EdgeInsets.all(16),
                           itemCount: doctors.length,
                           itemBuilder: (context, index) {
-                            final doctor = doctors[index];
+                            final d = doctors[index];
+                            final now = DateTime.now().toUtc();
 
-                            return DoctorCard(
-                              doctor: doctor,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        DoctorDetailsScreen(doctor: doctor),
-                                  ),
-                                );
-                              },
+                            // ✅ إخفاء بعد 10 أيام
+                            if (d.gracePeriodEnd != null &&
+                                d.gracePeriodEnd!.isBefore(now)) {
+                              return const SizedBox.shrink();
+                            }
+
+                            // ✅ تحديد الحالة
+                            bool isExpired = false;
+
+                            if (d.subscriptionActive == false) {
+                              isExpired = true;
+                            }
+
+                            if (d.subscriptionEnd != null &&
+                                d.subscriptionEnd!.isBefore(now)) {
+                              isExpired = true;
+                            }
+
+                            // ✅ حساب الأيام المتبقية
+                            int? remainingDays;
+
+                            if (d.gracePeriodEnd != null) {
+                              remainingDays = d.gracePeriodEnd!
+                                  .difference(now)
+                                  .inDays;
+
+                              if (remainingDays < 0) remainingDays = 0;
+                            }
+
+                            return Opacity(
+                              opacity: isExpired ? 0.5 : 1,
+                              child: IgnorePointer(
+                                ignoring: isExpired,
+                                child: DoctorCard(
+                                  doctor: d,
+                                  isExpired: isExpired,
+                                  remainingDays: remainingDays,
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            DoctorDetailsScreen(doctor: d),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                             );
                           },
                         ),

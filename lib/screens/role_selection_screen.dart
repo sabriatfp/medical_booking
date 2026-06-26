@@ -66,7 +66,7 @@ class RoleSelectionScreen extends StatelessWidget {
                     icon: const Icon(Icons.medical_services),
                     label: Text(t.registerDoctor),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal,
+                      backgroundColor: const Color.fromARGB(255, 4, 228, 205),
                     ),
                     onPressed: () {
                       Navigator.push(

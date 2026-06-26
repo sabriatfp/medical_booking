@@ -102,6 +102,22 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
+    final d = widget.doctor;
+    final now = DateTime.now().toUtc();
+
+    bool isExpired = false;
+
+    // ✅ إذا الاشتراك غير نشط
+    if (d.subscriptionActive == false) {
+      isExpired = true;
+    }
+
+    // ✅ إذا له تاريخ نهاية
+    if (d.subscriptionEnd != null) {
+      if (d.subscriptionEnd!.isBefore(now)) {
+        isExpired = true;
+      }
+    }
 
     if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -224,7 +240,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
           const SizedBox(height: 12),
 
-          if (_canBookDoctor())
+          if (_canBookDoctor() && !isExpired)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -243,7 +259,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Center(
                 child: Text(
-                  t.doctorNotAvailable,
+                  isExpired
+                      ? t.subscriptionExpiredDoctor
+                      : t.doctorNotAvailable,
                   style: const TextStyle(
                     color: Colors.red,
                     fontWeight: FontWeight.bold,
@@ -331,8 +349,26 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         final isDayOff = daysOff.contains(date);
 
         // ✅ القرار النهائي للحجز
+        final now = DateTime.now().toUtc();
+
+        bool isExpired = false;
+
+        if (widget.doctor.subscriptionActive == false) {
+          isExpired = true;
+        }
+
+        if (widget.doctor.subscriptionEnd != null) {
+          if (widget.doctor.subscriptionEnd!.isBefore(now)) {
+            isExpired = true;
+          }
+        }
+
         final canBook =
-            widget.doctor.isAvailable && availableInWeeks && !full && !isDayOff;
+            widget.doctor.isAvailable &&
+            availableInWeeks &&
+            !full &&
+            !isDayOff &&
+            !isExpired;
         Color cardColor;
         String subtitle;
 
@@ -358,6 +394,16 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
             subtitle: Text(subtitle),
             enabled: canBook,
             onTap: () {
+              if (isExpired) {
+                final t = AppLocalizations.of(context)!;
+
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(t.doctorNotAvailable)));
+
+                return;
+              }
+
               if (!widget.doctor.isAvailable) {
                 ScaffoldMessenger.of(
                   context,

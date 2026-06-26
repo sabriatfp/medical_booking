@@ -10,6 +10,7 @@ import 'role_selection_screen.dart';
 import 'package:medical_booking/features/secretary/ui/secretary_code_screen.dart';
 import 'package:medical_booking/features/admin/ui/admin_login_screen.dart';
 import '../providers/language_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// --------------------------------------------------
 /// SecretMultiTap (كما هو دون تغيير)
@@ -115,12 +116,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool loading = false;
   String? error;
-
+  String appVersion = "";
   @override
   void dispose() {
     emailController.dispose();
     passController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    loadVersion();
+  }
+
+  Future<void> loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+
+    setState(() {
+      appVersion = "${info.version} (${info.buildNumber})";
+    });
   }
 
   Future<void> login() async {
@@ -244,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     error!,
                     style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.right,
+                    textAlign: TextAlign.center,
                   ),
 
                 const SizedBox(height: 8),
@@ -267,7 +282,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
 
                 // ✅ إنشاء حساب جديد
-                TextButton(
+                ElevatedButton(
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -280,9 +295,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 30),
-                const Divider(),
+                //const Divider(),
                 const SizedBox(height: 14),
-
+                const SizedBox(height: 20), // ✅ هنا التحكم في النزول
                 // ✅ زر تغيير اللغة + زر السكريتير
                 // ✅ زر تغيير اللغة + زر السكريتير
                 Row(
@@ -300,7 +315,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             showDialog(
                               context: context,
                               builder: (_) => AlertDialog(
-                                title: Text(t.chooseLanguage),
+                                title: Center(
+                                  child: Text(
+                                    t.chooseLanguage,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                                 content: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -312,7 +332,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ).changeLanguage('ar');
                                         Navigator.pop(context);
                                       },
-                                      child: Text(t.arabic),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Text("🇸🇦 "),
+                                          Text(t.arabic),
+                                        ],
+                                      ),
                                     ),
                                     TextButton(
                                       onPressed: () {
@@ -322,7 +349,31 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ).changeLanguage('fr');
                                         Navigator.pop(context);
                                       },
-                                      child: Text(t.french),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Text("🇫🇷 "),
+                                          Text(t.french),
+                                        ],
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Provider.of<LanguageProvider>(
+                                          context,
+                                          listen: false,
+                                        ).changeLanguage('en'); // ✅ الإنجليزية
+                                        Navigator.pop(context);
+                                      },
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Text("🇬🇧 "), // ✅ العلم
+                                          Text(t.english), // ✅ النص مترجم
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -352,13 +403,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
                         const SizedBox(height: 6),
-                        Text(
-                          t.secretaryHint,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          textAlign: TextAlign.end,
-                        ),
+                        //Text(
+                        //  t.secretaryHint,
+                        //  style: Theme.of(context).textTheme.bodySmall,
+                        //  textAlign: TextAlign.end,
+                        //),
                       ],
                     ),
+                  ],
+                ),
+                Column(
+                  children: [
+                    const Divider(),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      "Version $appVersion•Med Sabri Necib•Tel: +216 29 610 447",
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+
+                    const SizedBox(height: 10),
                   ],
                 ),
               ],
@@ -388,7 +454,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       case 'network-request-failed':
         return t.networkError; // "تحقق من اتصال الإنترنت"
-
+      case 'invalid-credential':
+        return t.wrongPassword;
       default:
         return t.loginError; // "تعذر تسجيل الدخول"
     }

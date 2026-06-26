@@ -207,11 +207,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get renewSubscription => 'تجديد الاشتراك';
 
   @override
-  String remainingDays(Object days) {
-    return 'متبقي $days يوم';
-  }
-
-  @override
   String get lastUpdate => 'آخر تحديث';
 
   @override
@@ -701,6 +696,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get confirm => 'تأكيد';
+
+  @override
+  String get deleteAccountWarning =>
+      'هل أنت متأكد من حذف الحساب؟ لا يمكن التراجع عن هذه العملية.';
+
+  @override
+  String get deleteAccount => 'حذف الحساب';
 
   @override
   String get chooseAppointment => 'اختيار الموعد';
@@ -1331,4 +1333,91 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get currency => 'دت';
+
+  @override
+  String get subscriptionExpiredDoctor =>
+      'هذا الطبيب غير متاح مؤقتًا لانتهاء الاشتراك';
+
+  @override
+  String remainingDays(Object days) {
+    return 'متبقي $days يوم';
+  }
+
+  @override
+  String get appointmentDetails => 'تفاصيل الموعد ';
+
+  @override
+  String get callPatient => 'اتصال بالمريض';
+
+  @override
+  String get doctorNotes => 'ملاحظات الطبيب';
+
+  @override
+  String get visitType => 'نوع الموعد';
+
+  @override
+  String get consultation => 'استشارة';
+
+  @override
+  String get review => 'مراجعة';
+
+  @override
+  String get checkup => 'فحص';
+
+  @override
+  String get enterData => 'الرجاء إدخال بيانات';
+
+  @override
+  String get hasReport => 'يوجد تقرير';
+
+  @override
+  String get myReports => 'تقاريري';
+
+  @override
+  String get openReports => 'التقارير المفتوحة';
+
+  @override
+  String get sendReport => 'إرسال تقرير';
+
+  @override
+  String get bug => 'خلل';
+
+  @override
+  String get complaint => 'شكوى';
+
+  @override
+  String get suggestion => 'اقتراح';
+
+  @override
+  String get describeProblem => 'صف المشكلة...';
+
+  @override
+  String get send => 'إرسال';
+
+  @override
+  String get noReports => 'لا توجد تقارير بعد';
+
+  @override
+  String get invalidInput => 'يرجى إدخال رسالة';
+
+  @override
+  String get reportSentSuccessfully => 'تم إرسال التقرير بنجاح';
+
+  @override
+  String get payment => 'الدفع';
+
+  @override
+  String get contactUs => 'اتصل بنا';
+
+  @override
+  String get replyAdded => 'تمت إضافة الرد';
+
+  @override
+  String get adminReply => 'رد الإدارة:';
+
+  @override
+  String get english => 'الإنجليزية';
+
+  @override
+  String get appDescription => 'تطبيق لحجز المواعيد الطبية.';
 }

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:medical_booking/screens/doctor/generate_codes_screen.dart';
+import 'package:medical_booking/screens/doctor/doctor_reports_screen.dart';
 
 class DoctorSettingsScreen extends StatefulWidget {
   const DoctorSettingsScreen({super.key});
@@ -235,6 +236,61 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
                     onPressed: saveChanges,
                     child: Text(t.saveChanges),
                   ),
+                  _card(
+                    child: Column(
+                      children: [
+                        _field(emailController, t.email),
+                        ElevatedButton(
+                          onPressed: updatingEmail ? null : updateEmail,
+                          child: updatingEmail
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(t.updateEmail),
+                        ),
+                        const SizedBox(height: 10),
+                        // ✅ كلمة المرور الحالية
+                        _field(
+                          currentPasswordController,
+                          t.currentPassword,
+                          obscure: true,
+                        ),
+
+                        // ✅ كلمة المرور الجديدة
+                        _field(
+                          newPasswordController,
+                          t.newPassword,
+                          obscure: true,
+                        ),
+
+                        // ✅ تأكيد كلمة المرور الجديدة
+                        _field(
+                          confirmPasswordController,
+                          t.confirmNewPassword,
+                          obscure: true,
+                        ),
+
+                        ElevatedButton(
+                          onPressed: updatingPassword ? null : updatePassword,
+                          child: updatingPassword
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(t.updatePassword),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -319,80 +375,79 @@ class _DoctorSettingsScreenState extends State<DoctorSettingsScreen> {
 
             const SizedBox(height: 16),
 
-            _card(
-              child: Column(
-                children: [
-                  Text(t.secretaryManagement),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.qr_code),
-                    label: Text(t.manageSecretary),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              GenerateCodesScreen(doctorId: doctorId!),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('reports')
+                  .where(
+                    'senderId',
+                    isEqualTo: FirebaseAuth.instance.currentUser!.uid,
+                  )
+                  .where('replySeen', isEqualTo: false) // ✅ غير مقروء
+                  .snapshots(),
+              builder: (context, snapshot) {
+                int count = 0;
+
+                if (snapshot.hasData) {
+                  count = snapshot.data!.docs.length;
+                }
+
+                return Stack(
+                  children: [
+                    _card(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Icon(
+                            Icons.report,
+                            size: 32,
+                            color: Colors.teal,
+                          ),
+                          const SizedBox(height: 10),
+
+                          Text(
+                            t.myReports,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.arrow_forward),
+                            label: Text(t.contactUs),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const DoctorReportsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    /// ✅ ✅ ✅ 🔴 النقطة الحمراء
+                    if (count > 0)
+                      Positioned(
+                        top: 10,
+                        left: 10, // غيّرها right حسب التصميم
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            _card(
-              child: Column(
-                children: [
-                  _field(emailController, t.email),
-                  ElevatedButton(
-                    onPressed: updatingEmail ? null : updateEmail,
-                    child: updatingEmail
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(t.updateEmail),
-                  ),
-                  const SizedBox(height: 10),
-                  // ✅ كلمة المرور الحالية
-                  _field(
-                    currentPasswordController,
-                    t.currentPassword,
-                    obscure: true,
-                  ),
-
-                  // ✅ كلمة المرور الجديدة
-                  _field(newPasswordController, t.newPassword, obscure: true),
-
-                  // ✅ تأكيد كلمة المرور الجديدة
-                  _field(
-                    confirmPasswordController,
-                    t.confirmNewPassword,
-                    obscure: true,
-                  ),
-
-                  ElevatedButton(
-                    onPressed: updatingPassword ? null : updatePassword,
-                    child: updatingPassword
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(t.updatePassword),
-                  ),
-                ],
-              ),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ),

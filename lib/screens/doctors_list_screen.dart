@@ -35,27 +35,72 @@ class DoctorsListScreen extends StatelessWidget {
           }
 
           final doctors = snapshot.data ?? [];
+          final now = DateTime.now().toUtc();
 
-          if (doctors.isEmpty) {
+          // ✅ ✅ 🔥 تنظيف القائمة (بدون فراغات)
+          final visibleDoctors = doctors.where((d) {
+            // إخفاء الطبيب بعد انتهاء المهلة
+            if (d.gracePeriodEnd != null && d.gracePeriodEnd!.isBefore(now)) {
+              return false;
+            }
+            return true;
+          }).toList();
+          visibleDoctors.sort((a, b) {
+            final aActive = a.subscriptionActive == true;
+            final bActive = b.subscriptionActive == true;
+
+            if (aActive == bActive) return 0;
+            return aActive ? -1 : 1; // ✅ active يطلع فوق
+          });
+          if (visibleDoctors.isEmpty) {
             return Center(child: Text(t.noDoctorsAvailable));
           }
 
           return ListView.builder(
             padding: const EdgeInsets.all(12),
-            itemCount: doctors.length,
+            itemCount: visibleDoctors.length,
             itemBuilder: (context, i) {
-              final d = doctors[i];
+              final d = visibleDoctors[i];
 
-              return DoctorCard(
-                doctor: d,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DoctorDetailsScreen(doctor: d),
-                    ),
-                  );
-                },
+              // ✅ تحديد الحالة
+              bool isExpired = false;
+
+              if (d.subscriptionActive == false) {
+                isExpired = true;
+              }
+
+              if (d.subscriptionEnd != null &&
+                  d.subscriptionEnd!.isBefore(now)) {
+                isExpired = true;
+              }
+
+              // ✅ حساب الأيام المتبقية
+              int? remainingDays;
+
+              if (d.gracePeriodEnd != null) {
+                remainingDays = d.gracePeriodEnd!.difference(now).inDays;
+
+                if (remainingDays < 0) remainingDays = 0;
+              }
+
+              return Opacity(
+                opacity: isExpired ? 0.5 : 1,
+                child: IgnorePointer(
+                  ignoring: isExpired,
+                  child: DoctorCard(
+                    doctor: d,
+                    isExpired: isExpired, // ✅ جديد
+                    remainingDays: remainingDays, // ✅ جديد
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DoctorDetailsScreen(doctor: d),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               );
             },
           );

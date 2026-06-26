@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:medical_booking/screens/notification_settings_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:medical_booking/generated_l10n/app_localizations.dart';
+import '../providers/language_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class PatientSettingsScreen extends StatefulWidget {
   const PatientSettingsScreen({super.key});
@@ -10,309 +13,284 @@ class PatientSettingsScreen extends StatefulWidget {
   State<PatientSettingsScreen> createState() => _PatientSettingsScreenState();
 }
 
+String appVersion = "";
+
 class _PatientSettingsScreenState extends State<PatientSettingsScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _currentPasswordCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _newPasswordCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  final emailController = TextEditingController();
+  final phoneController = TextEditingController();
+  final currentPasswordController = TextEditingController();
+  final newPasswordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
 
-  bool _loading = true;
-  bool _saving = false;
+  bool loading = true;
+  bool saving = false;
 
-  late String _uid;
-  late DocumentReference<Map<String, dynamic>> _patientDoc;
+  String? uid;
 
   @override
   void initState() {
     super.initState();
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showSnack('الرجاء تسجيل الدخول أولاً');
-        Navigator.of(context).pop();
-      });
-      return;
-    }
-    _uid = user.uid;
-    _patientDoc = FirebaseFirestore.instance.collection('patients').doc(_uid);
-    _loadInitial();
+    _load();
+    loadVersion(); // ✅ مهم
   }
 
-  Future<void> _loadInitial() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      final snap = await _patientDoc.get();
-      final data = snap.data() ?? {};
+  Future<void> loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
 
-      _emailCtrl.text = user?.email ?? (data['email'] as String? ?? '');
-      _phoneCtrl.text = (data['phone'] as String?) ?? (user?.phoneNumber ?? '');
+    setState(() {
+      appVersion = "v${info.version} (${info.buildNumber})";
+    });
+  }
 
-      setState(() => _loading = false);
-    } catch (e) {
-      setState(() => _loading = false);
-      _showSnack('تعذر تحميل بيانات الحساب: $e');
-    }
+  Future<void> _load() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    uid = user.uid;
+    emailController.text = user.email ?? '';
+
+    final doc = await FirebaseFirestore.instance
+        .collection('patients')
+        .doc(uid)
+        .get();
+
+    phoneController.text = doc.data()?['phone'] ?? '';
+
+    setState(() => loading = false);
   }
 
   @override
   void dispose() {
-    _currentPasswordCtrl.dispose();
-    _emailCtrl.dispose();
-    _newPasswordCtrl.dispose();
-    _phoneCtrl.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    currentPasswordController.dispose();
+    newPasswordController.dispose();
+    confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _showSnack(String msg) {
-    if (!mounted) return;
+  void snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Future<bool> _reauthenticateIfNeeded({
-    required String currentPassword,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      _showSnack('لا يوجد مستخدم مسجل دخول.');
-      return false;
-    }
-    final email = user.email;
-    if (email == null) {
-      return true; // حساب بدون إيميل (مزود آخر) لا نعيد المصادقة هنا
-    }
+  // ================= SAVE =================
+  Future<void> saveChanges() async {
+    final t = AppLocalizations.of(context)!;
 
-    try {
-      final cred = EmailAuthProvider.credential(
-        email: email,
-        password: currentPassword,
-      );
-      await user.reauthenticateWithCredential(cred);
-      return true;
-    } on FirebaseAuthException catch (e) {
-      _showSnack(
-        e.code == 'wrong-password'
-            ? 'كلمة المرور الحالية غير صحيحة'
-            : 'فشل إعادة المصادقة: ${e.message ?? e.code}',
-      );
-      return false;
-    } catch (e) {
-      _showSnack('فشل إعادة المصادقة: $e');
-      return false;
-    }
-  }
-
-  Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      _showSnack('لا يوجد مستخدم مسجل دخول.');
-      return;
-    }
-
-    final newEmail = _emailCtrl.text.trim();
-    final newPassword = _newPasswordCtrl.text.trim();
-    final newPhone = _phoneCtrl.text.trim();
-
-    final emailChanged =
-        (newEmail.isNotEmpty && newEmail != (user.email ?? ''));
-    final passwordChanged = newPassword.isNotEmpty;
-    final phoneChanged = newPhone
-        .isNotEmpty; // سنحفظه في Firestore (توثيق الهاتف يتم عبر التدفق أدناه)
-
-    if (!emailChanged && !passwordChanged && !phoneChanged) {
-      _showSnack('لا توجد تغييرات للحفظ.');
-      return;
-    }
-
-    setState(() => _saving = true);
+    setState(() => saving = true);
 
     try {
-      // إعادة المصادقة إذا كنا سنغير الإيميل أو كلمة المرور
-      if (emailChanged || passwordChanged) {
-        final ok = await _reauthenticateIfNeeded(
-          currentPassword: _currentPasswordCtrl.text,
+      final user = FirebaseAuth.instance.currentUser!;
+      final newEmail = emailController.text.trim();
+      final newPhone = phoneController.text.trim();
+
+      // تحديث البريد
+      if (newEmail != user.email) {
+        final cred = EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentPasswordController.text,
         );
-        if (!ok) {
-          setState(() => _saving = false);
-          return;
-        }
-      }
 
-      // 1) تحديث الإيميل في Auth
-      if (emailChanged) {
+        await user.reauthenticateWithCredential(cred);
         await user.updateEmail(newEmail);
-        // اختياري: تفعيل تأكيد البريد قبل الإبدال النهائي:
-        // await user.verifyBeforeUpdateEmail(newEmail);
       }
 
-      // 2) تحديث كلمة المرور في Auth
-      if (passwordChanged) {
-        await user.updatePassword(newPassword);
+      // تحديث الباسوورد
+      if (newPasswordController.text.isNotEmpty) {
+        if (newPasswordController.text != confirmPasswordController.text) {
+          throw Exception(t.passwordsDoNotMatch);
+        }
+
+        await user.updatePassword(newPasswordController.text);
       }
 
-      // 3) تحديث Firestore (email/phone)
-      final updateData = <String, dynamic>{};
-      if (emailChanged) updateData['email'] = newEmail;
-      if (phoneChanged) updateData['phone'] = newPhone;
-      if (updateData.isNotEmpty) {
-        await _patientDoc.set(updateData, SetOptions(merge: true));
-      }
+      // تحديث Firestore
+      await FirebaseFirestore.instance.collection('patients').doc(uid).set({
+        'phone': newPhone,
+      }, SetOptions(merge: true));
 
-      _showSnack('تم حفظ التغييرات بنجاح.');
-    } on FirebaseAuthException catch (e) {
-      _showSnack('فشل الحفظ: ${e.message ?? e.code}');
+      snack(t.savedSuccessfully);
     } catch (e) {
-      _showSnack('حدث خطأ غير متوقع: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      snack(e.toString());
+    }
+
+    setState(() => saving = false);
+  }
+
+  // ================= DELETE ACCOUNT =================
+  Future<void> deleteAccount() async {
+    final t = AppLocalizations.of(context)!;
+
+    final confirm = await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(t.confirmDelete),
+        content: Text(t.deleteAccountWarning),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(t.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(t.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+      await FirebaseFirestore.instance.collection('patients').doc(uid).delete();
+
+      await user.delete();
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      snack(e.toString());
     }
   }
 
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    final t = AppLocalizations.of(context)!;
+
+    if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('إعدادات المريض'),
-        actions: [
-          if (_saving)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF6F8FA),
+      appBar: AppBar(title: Text(t.patientSettings)),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ===== البريد =====
-            TextFormField(
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'البريد الإلكتروني',
-                hintText: 'example@mail.com',
-                prefixIcon: Icon(Icons.alternate_email),
-              ),
-              validator: (v) {
-                final value = (v ?? '').trim();
-                if (value.isEmpty) return 'الرجاء إدخال البريد';
-                final emailRegex = RegExp(
-                  r'^[\w\.\-]+@([\w\-]+\.)+[\w\-]{2,}$',
-                );
-                if (!emailRegex.hasMatch(value)) return 'بريد غير صحيح';
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
+            // ================= ACCOUNT =================
+            _card(
+              child: Column(
+                children: [
+                  _field(emailController, t.email),
+                  _field(phoneController, t.phoneNumber),
 
-            // ===== كلمة المرور الحالية (يلزم عند تعديل البريد/كلمة المرور) =====
-            TextFormField(
-              controller: _currentPasswordCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'كلمة المرور الحالية (للتأكيد)',
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-              validator: (v) {
-                final user = FirebaseAuth.instance.currentUser;
-                final emailChanged =
-                    _emailCtrl.text.trim().isNotEmpty &&
-                    _emailCtrl.text.trim() != (user?.email ?? '');
-                final newPwdEntered = _newPasswordCtrl.text.trim().isNotEmpty;
-                if (emailChanged || newPwdEntered) {
-                  if ((v ?? '').isEmpty) {
-                    return 'أدخل كلمة المرور الحالية للتأكيد';
-                  }
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // ===== كلمة المرور الجديدة =====
-            TextFormField(
-              controller: _newPasswordCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'كلمة المرور الجديدة (اختياري)',
-                prefixIcon: Icon(Icons.lock),
-              ),
-              validator: (v) {
-                final value = (v ?? '').trim();
-                if (value.isEmpty) return null;
-                if (value.length < 6) {
-                  return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // ===== رقم الهاتف =====
-            TextFormField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'رقم الهاتف',
-                hintText: '+216 5x xxx xxx',
-                prefixIcon: Icon(Icons.phone),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ===== زر الحفظ =====
-            ElevatedButton.icon(
-              onPressed: _saving ? null : _saveChanges,
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('حفظ التغييرات'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ===== إعدادات الإشعارات (كما كانت لديك) =====
-            ListTile(
-              leading: const Icon(Icons.notifications_active),
-              title: const Text('إعدادات الإشعارات'),
-              subtitle: const Text(
-                'تفعيل/تعطيل وإدارة الأجهزة المستلمة للإشعارات',
-              ),
-              onTap: () {
-                final uid = FirebaseAuth.instance.currentUser?.uid;
-                if (uid == null) {
-                  _showSnack('الرجاء تسجيل الدخول أولًا');
-                  return;
-                }
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => NotificationSettingsScreen(
-                      role: UserRole.patient,
-                      userId: uid,
-                    ),
+                  _field(
+                    currentPasswordController,
+                    t.currentPassword,
+                    obscure: true,
                   ),
-                );
-              },
+                  _field(newPasswordController, t.newPassword, obscure: true),
+                  _field(
+                    confirmPasswordController,
+                    t.confirmNewPassword,
+                    obscure: true,
+                  ),
+
+                  ElevatedButton(
+                    onPressed: saving ? null : saveChanges,
+                    child: Text(t.saveChanges),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'ملاحظة: تغيير البريد أو كلمة المرور يتطلب تأكيدًا بكلمة المرور الحالية لحماية حسابك.',
-              style: TextStyle(color: Colors.grey),
+
+            const SizedBox(height: 16),
+
+            // ================= LANGUAGE =================
+            _card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.language),
+                  const SizedBox(height: 10),
+                  DropdownButton<String>(
+                    value: Localizations.localeOf(context).languageCode,
+                    onChanged: (value) {
+                      Provider.of<LanguageProvider>(
+                        context,
+                        listen: false,
+                      ).changeLanguage(value!);
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 'ar', child: Text('العربية')),
+                      DropdownMenuItem(value: 'fr', child: Text('Français')),
+                      DropdownMenuItem(value: 'en', child: Text('English')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ================= ABOUT =================
+            _card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.aboutApp),
+                  const SizedBox(height: 8),
+
+                  Text(
+                    "Medical Booking $appVersion\n${t.appDescription}",
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ================= DELETE =================
+            _card(
+              child: Column(
+                children: [
+                  Text(
+                    t.deleteAccount,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
+                    onPressed: deleteAccount,
+                    child: Text(t.delete),
+                  ),
+                ],
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _card({required Widget child}) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(padding: const EdgeInsets.all(16), child: child),
+    );
+  }
+
+  Widget _field(TextEditingController c, String label, {bool obscure = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: c,
+        obscureText: obscure,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );

@@ -24,7 +24,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    if (_navArgs != null) return; // ✅ حتى لا يتكرر
+    if (_navArgs != null) return;
 
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
@@ -32,12 +32,26 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     if (args != null) {
       _navArgs = args;
 
-      debugPrint("ADMIN SUBSCRIPTIONS → opened from request: $_navArgs");
+      final doctorUid = args['doctorUid'];
 
-      // ⬅️ هنا لاحقًا يمكنك:
-      // - highlight الطبيب
-      // - auto scroll
-      // - أو auto open popup
+      // ✅ مهم: تنفيذ بعد build
+      Future.microtask(() async {
+        final t = AppLocalizations.of(context)!;
+
+        try {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(doctorUid)
+              .get();
+
+          final data = userDoc.data();
+          if (data == null) return;
+
+          // ✅ افتح dialog مباشرة
+        } catch (e) {
+          debugPrint("Auto dialog error: $e");
+        }
+      });
     }
   }
 
@@ -70,7 +84,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     if (ts == null || ts is! Timestamp) return null;
 
     final end = ts.toDate();
-    return end.difference(DateTime.now()).inDays;
+    return end.toUtc().difference(DateTime.now().toUtc()).inDays;
   }
 
   bool _isExpiringSoon(Map<String, dynamic> data) {
@@ -121,7 +135,8 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
         .doc(doctorUid);
 
     final endTimestamp = end == null ? null : Timestamp.fromDate(end.toUtc());
-
+    final now = DateTime.now().toUtc();
+    // ✅ 1. تحديث users (كما هو)
     await userRef.update({
       'subscriptionActive': active,
       'subscriptionEnd': active ? endTimestamp : null,
@@ -130,6 +145,30 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
       'subscriptionUpdatedBy':
           FirebaseAuth.instance.currentUser?.uid ?? 'admin',
     });
+
+    // ✅ 2. NEW: Sync مع doctors collection
+    try {
+      final userSnap = await userRef.get();
+      final doctorId = userSnap.data()?['doctorId'];
+
+      if (doctorId != null && doctorId.toString().isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('doctors')
+            .doc(doctorId)
+            .update({
+              'subscriptionActive': active,
+              'subscriptionEnd': active ? endTimestamp : null,
+
+              'gracePeriodEnd': active
+                  ? null
+                  : Timestamp.fromDate(now.add(const Duration(days: 10))),
+
+              'isVisibleInSearch': true,
+            });
+      }
+    } catch (e) {
+      debugPrint("Doctor sync failed: $e");
+    }
   }
 
   Future<void> _activateFor(
@@ -157,9 +196,26 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
       plan: plan ?? 'manual',
     );
 
+    /// ✅ ✅ ✅ هنا الحل
+    final requestId = _navArgs?['requestId'];
+    if (requestId != null) {
+      await FirebaseFirestore.instance
+          .collection('subscription_requests')
+          .doc(requestId)
+          .update({
+            'status': 'processed',
+            'processedAt': FieldValue.serverTimestamp(),
+            'processedBy': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+          });
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("${t.activatedUntil} ${_fmtDate(end.toLocal())}")),
     );
+
+    if (_navArgs?['requestId'] != null && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _activateCustomDialog(
@@ -215,6 +271,43 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
         t: t,
       );
     }
+  }
+
+  Widget _quickBtn(String label, Color color, Future<void> Function() onTap) {
+    return ElevatedButton(
+      onPressed: () async {
+        await onTap(); // ✅ الحل
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(40, 30),
+        textStyle: const TextStyle(fontSize: 12),
+      ),
+      child: Text(label),
+    );
+  }
+
+  Future<bool> _confirmAction(String message) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm"),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
   }
 
   Future<void> _deactivate(
@@ -426,10 +519,21 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                   );
                 }
 
-                final docs = (snap.data?.docs ?? [])
+                final allDocs = (snap.data?.docs ?? [])
                     .where((d) => _matchesSearch(d.data()))
                     .where((d) => _passesFilter(d.data()))
                     .toList();
+
+                /// ✅ إذا دخلنا من request → نعرض طبيب واحد فقط
+                List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+
+                if (_navArgs != null && _navArgs?['doctorUid'] != null) {
+                  final targetId = _navArgs!['doctorUid'];
+
+                  docs = allDocs.where((d) => d.id == targetId).toList();
+                } else {
+                  docs = allDocs;
+                }
 
                 if (docs.isEmpty) {
                   return Center(child: Text(t.noResults));
@@ -442,10 +546,9 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                     final doc = docs[index];
                     final data = doc.data();
                     final userId = doc.id;
-                    print(
+                    debugPrint(
                       'ADMIN SUB → userId=$userId, doctorId=${data['doctorId']}, active=${_isActive(data)}',
                     );
-
                     final name = (data['name'] ?? t.noName).toString();
                     final email = (data['email'] ?? '').toString();
                     final doctorId = (data['doctorId'] ?? '').toString();
@@ -480,23 +583,80 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                       color = Colors.orange;
                     }
 
-                    return Builder(
-                      builder: (tileContext) => ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.teal.shade100,
-                          child: const Icon(Icons.person, color: Colors.teal),
+                    final isFromRequest = _navArgs?['doctorUid'] == userId;
+
+                    return Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+
+                        /// ✅ Border حسب الحالة
+                        border: Border.all(
+                          color: isFromRequest
+                              ? Colors.orange
+                              : _isExpiringSoon(data)
+                              ? Colors.orange
+                              : active
+                              ? Colors.green
+                              : Colors.red,
+                          width: 1.5,
                         ),
-                        title: Text(name),
-                        subtitle: Column(
+
+                        /// ✅ Shadow
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            /// ✅ HEADER
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Colors.teal.shade100,
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            /// ✅ Email
                             if (email.isNotEmpty)
-                              Text(email, textDirection: TextDirection.ltr),
-                            if (doctorId.isNotEmpty)
                               Text(
-                                "doctorId: $doctorId",
-                                style: const TextStyle(fontSize: 12),
+                                email,
+                                style: const TextStyle(color: Colors.grey),
                               ),
+
+                            /// ✅ Status
+                            const SizedBox(height: 4),
                             Text(
                               status,
                               style: TextStyle(
@@ -504,9 +664,104 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+
+                            const SizedBox(height: 10),
+
+                            /// ✅ ACTION BAR
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                _quickBtn(
+                                  "7d",
+                                  const Color.fromARGB(255, 122, 190, 247),
+                                  () async {
+                                    final ok = await _confirmAction(
+                                      "Activate 7 days?",
+                                    );
+                                    if (!ok) return;
+
+                                    await _activateFor(
+                                      userId,
+                                      data,
+                                      duration: const Duration(days: 7),
+                                      t: t,
+                                      plan: '7d',
+                                    );
+                                  },
+                                ),
+
+                                _quickBtn(
+                                  "30d",
+                                  const Color.fromARGB(255, 135, 231, 138),
+                                  () async {
+                                    final ok = await _confirmAction(
+                                      "Activate 30 days?",
+                                    );
+                                    if (!ok) return;
+
+                                    await _activateFor(
+                                      userId,
+                                      data,
+                                      duration: const Duration(days: 30),
+                                      t: t,
+                                      plan: '30d',
+                                    );
+                                  },
+                                ),
+
+                                _quickBtn(
+                                  "90d",
+                                  const Color.fromARGB(255, 241, 192, 117),
+                                  () async {
+                                    final ok = await _confirmAction(
+                                      "Activate 90 days?",
+                                    );
+                                    if (!ok) return;
+
+                                    await _activateFor(
+                                      userId,
+                                      data,
+                                      duration: const Duration(days: 90),
+                                      t: t,
+                                      plan: '90d',
+                                    );
+                                  },
+                                ),
+
+                                /// ✅ Custom
+                                OutlinedButton(
+                                  onPressed: () {
+                                    _activateCustomDialog(userId, data, t);
+                                  },
+                                  child: const Text("+"),
+                                ),
+
+                                /// ✅ Deactivate
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () async {
+                                      final ok = await _confirmAction(
+                                        "Deactivate subscription?",
+                                      );
+                                      if (!ok) return;
+
+                                      _deactivate(userId, data, t);
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                        trailing: _actionsMenu(tileContext, userId, data, t),
                       ),
                     );
                   },

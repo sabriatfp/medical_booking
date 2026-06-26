@@ -121,97 +121,122 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
       return Scaffold(body: Center(child: Text(t.doctorIdNotFound)));
     }
 
-    return Scaffold(
-      appBar: AppBar(title: Text(t.financeDashboard), centerTitle: true),
+    return WillPopScope(
+      onWillPop: () async {
+        _clearSubscriptionUpdate();
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(title: Text(t.financeDashboard), centerTitle: true),
 
-      body: RefreshIndicator(
-        onRefresh: fetchFinanceData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+        body: RefreshIndicator(
+          onRefresh: fetchFinanceData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
 
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              /// 💰 الملخص المالي
-              _sectionTitle(t.revenueSummary),
-              const SizedBox(height: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                /// 💰 الملخص المالي
+                _sectionTitle(t.revenueSummary),
+                const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  statCard(
-                    title: t.todayRevenue,
-                    value: "${todayRevenue.toStringAsFixed(0)} د",
-                    icon: Icons.today,
-                    color: Colors.blue,
-                  ),
-                  const SizedBox(width: 8),
-                  statCard(
-                    title: t.monthRevenue,
-                    value: "${monthlyRevenue.toStringAsFixed(0)} د",
-                    icon: Icons.calendar_month,
-                    color: Colors.green,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              Row(
-                children: [
-                  statCard(
-                    title: t.totalRevenue,
-                    value: "${totalRevenue.toStringAsFixed(0)} د",
-                    icon: Icons.attach_money,
-                    color: Colors.teal,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
-              /// 📊 أداء المواعيد
-              _sectionTitle(t.appointmentPerformance),
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  statCard(
-                    title: t.confirmedAppointments,
-                    value: "$confirmedAppointments",
-                    icon: Icons.check_circle,
-                    color: Colors.orange,
-                  ),
-                  const SizedBox(width: 8),
-                  statCard(
-                    title: t.cancelledAppointments,
-                    value: "$cancelledAppointments",
-                    icon: Icons.cancel,
-                    color: Colors.red,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-              _successRateCard(),
-
-              const SizedBox(height: 30),
-
-              /// 🧾 الاشتراك
-              _sectionTitle(t.subscription),
-              const SizedBox(height: 12),
-
-              _subscriptionCard(),
-
-              const SizedBox(height: 30),
-
-              Center(
-                child: Text(
-                  "${t.lastUpdate}: ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.now())}",
-                  style: const TextStyle(color: Colors.grey),
+                Row(
+                  children: [
+                    statCard(
+                      title: t.todayRevenue,
+                      value: "${todayRevenue.toStringAsFixed(0)} د",
+                      icon: Icons.today,
+                      color: Colors.blue,
+                    ),
+                    const SizedBox(width: 8),
+                    statCard(
+                      title: t.monthRevenue,
+                      value: "${monthlyRevenue.toStringAsFixed(0)} د",
+                      icon: Icons.calendar_month,
+                      color: Colors.green,
+                    ),
+                  ],
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 10),
+
+                Row(
+                  children: [
+                    statCard(
+                      title: t.totalRevenue,
+                      value: "${totalRevenue.toStringAsFixed(0)} د",
+                      icon: Icons.attach_money,
+                      color: Colors.teal,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 30),
+
+                /// 📊 أداء المواعيد
+                _sectionTitle(t.appointmentPerformance),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    statCard(
+                      title: t.confirmedAppointments,
+                      value: "$confirmedAppointments",
+                      icon: Icons.check_circle,
+                      color: Colors.orange,
+                    ),
+                    const SizedBox(width: 8),
+                    statCard(
+                      title: t.cancelledAppointments,
+                      value: "$cancelledAppointments",
+                      icon: Icons.cancel,
+                      color: Colors.red,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+                _successRateCard(),
+
+                const SizedBox(height: 30),
+
+                /// 🧾 الاشتراك
+                Stack(
+                  children: [
+                    _sectionTitle(t.subscription),
+
+                    if (userData?['subscriptionUpdate'] == true)
+                      Positioned(
+                        top: -3,
+                        left: -12,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                _subscriptionCard(),
+
+                const SizedBox(height: 30),
+
+                Center(
+                  child: Text(
+                    "${t.lastUpdate}: ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.now())}",
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -384,7 +409,7 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
 
             const SizedBox(height: 14),
 
-            if (status == t.subscriptionExpired)
+            if (status == t.subscriptionExpired || expiringSoon)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -416,5 +441,14 @@ class _DoctorFinanceScreenState extends State<DoctorFinanceScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _clearSubscriptionUpdate() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+      "subscriptionUpdate": false,
+    });
   }
 }

@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Firebase secrets (VERY IMPORTANT)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+# VS Code (اختياري، حسب رغبتك)
+.vscode/

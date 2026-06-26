@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:medical_booking/screens/secretary/secretary_dashboard_screen.dart';
 import 'package:medical_booking/screens/login_screen.dart';
 import 'package:medical_booking/screens/home_screen.dart';
+import 'package:medical_booking/features/admin/ui/admin_dashboard_screen.dart';
 
 class SplashRouter extends StatefulWidget {
   const SplashRouter({super.key});
@@ -51,7 +52,13 @@ class _SplashRouterState extends State<SplashRouter> {
       final data = snap.data()!;
       final role = data['role'];
 
-      // 3️⃣ سكريتير
+      // ✅ Admin
+      if (role == 'admin') {
+        _go(const AdminDashboardScreen());
+        return;
+      }
+
+      // ✅ Secretary
       if (role == 'secretary' && data['activeSecretaryDoctorId'] != null) {
         _go(
           SecretaryDashboardScreen(doctorId: data['activeSecretaryDoctorId']),
@@ -59,7 +66,7 @@ class _SplashRouterState extends State<SplashRouter> {
         return;
       }
 
-      // 4️⃣ طبيب أو مريض
+      // ✅ Patient (default)
       _go(const HomeScreen());
     } catch (e) {
       debugPrint('[SplashRouter] error: $e');

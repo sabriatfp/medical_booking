@@ -4,7 +4,7 @@ import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
-
+import 'package:intl/date_symbol_data_local.dart';
 import 'providers/language_provider.dart';
 import 'app/splash_router.dart';
 import 'screens/login_screen.dart';
@@ -13,6 +13,11 @@ import 'screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initializeDateFormatting('fr'); // ✅ مهم
+  await initializeDateFormatting('ar');
+  await initializeDateFormatting('en');
+
   await Firebase.initializeApp();
 
   FirebaseFirestore.instance.settings = const Settings(

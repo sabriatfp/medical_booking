@@ -5,9 +5,15 @@ import '../models/doctor.dart';
 class DoctorCard extends StatelessWidget {
   final Doctor doctor;
   final VoidCallback onTap;
-
-  const DoctorCard({super.key, required this.doctor, required this.onTap});
-
+  final bool isExpired;
+  final int? remainingDays;
+  const DoctorCard({
+    super.key,
+    required this.doctor,
+    required this.onTap,
+    this.isExpired = false,
+    this.remainingDays,
+  });
   bool _canBookDoctor() {
     return doctor.isAvailable;
   }
@@ -69,7 +75,26 @@ class DoctorCard extends StatelessWidget {
                     ),
 
                     const SizedBox(height: 4),
-
+                    if (isExpired && remainingDays != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          t.remainingDays(remainingDays ?? 0),
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     // الاختصاص
                     Text(
                       _localizedSpecialty(context),

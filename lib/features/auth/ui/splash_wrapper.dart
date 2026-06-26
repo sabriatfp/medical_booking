@@ -9,6 +9,7 @@ import 'package:medical_booking/generated_l10n/app_localizations.dart';
 // Screens
 import 'package:medical_booking/screens/login_screen.dart';
 import 'package:medical_booking/screens/home_screen.dart';
+import 'package:medical_booking/features/admin/ui/admin_dashboard_screen.dart';
 
 class SplashWrapper extends StatefulWidget {
   const SplashWrapper({super.key});
@@ -68,6 +69,7 @@ class _SplashWrapperState extends State<SplashWrapper> {
 
   void _goLogin() => _go(const LoginScreen());
   void _goHome() => _go(const HomeScreen());
+  void _goAdmin() => _go(const AdminDashboardScreen());
 
   Future<void> _bootRoute() async {
     final t = AppLocalizations.of(context)!;
@@ -104,7 +106,24 @@ class _SplashWrapperState extends State<SplashWrapper> {
     }
 
     // ✅ التوجيه بسيط: الجميع إلى Home
-    _goHome();
+    switch (role) {
+      case 'admin':
+        _goAdmin();
+        break;
+
+      case 'doctor':
+        _goHome(); // HomeScreen فيه منطق doctor
+        break;
+
+      case 'patient':
+        _goHome();
+        break;
+
+      default:
+        _showSnack(t.invalidUserRole);
+        await Future.delayed(const Duration(milliseconds: 800));
+        _goLogin();
+    }
   }
 
   void _showSnack(String msg) {

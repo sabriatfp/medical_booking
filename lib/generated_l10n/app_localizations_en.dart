@@ -207,11 +207,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get renewSubscription => 'Renew Subscription';
 
   @override
-  String remainingDays(Object days) {
-    return '$days days remaining';
-  }
-
-  @override
   String get lastUpdate => 'Last Update';
 
   @override
@@ -705,6 +700,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get confirm => 'Confirm';
+
+  @override
+  String get deleteAccountWarning =>
+      'Are you sure you want to delete the account? This action cannot be undone.';
+
+  @override
+  String get deleteAccount => 'Delete Account';
 
   @override
   String get chooseAppointment => 'Choose appointment';
@@ -1337,4 +1339,91 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get currency => 'TND';
+
+  @override
+  String get subscriptionExpiredDoctor =>
+      'هذا الطبيب غير متاح مؤقتًا لانتهاء الاشتراك';
+
+  @override
+  String remainingDays(Object days) {
+    return '$days days remaining';
+  }
+
+  @override
+  String get appointmentDetails => 'Appointment details';
+
+  @override
+  String get callPatient => 'Call patient';
+
+  @override
+  String get doctorNotes => 'Doctor notes';
+
+  @override
+  String get visitType => 'Visit type';
+
+  @override
+  String get consultation => 'Consultation';
+
+  @override
+  String get review => 'Review';
+
+  @override
+  String get checkup => 'Check-up';
+
+  @override
+  String get enterData => 'Please enter data';
+
+  @override
+  String get hasReport => 'Has report';
+
+  @override
+  String get myReports => 'My Reports';
+
+  @override
+  String get openReports => 'التقارير المفتوحة';
+
+  @override
+  String get sendReport => ' Send Report';
+
+  @override
+  String get bug => 'Bug';
+
+  @override
+  String get complaint => 'Complaint';
+
+  @override
+  String get suggestion => 'Suggestion';
+
+  @override
+  String get describeProblem => 'Describe the issue...';
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get noReports => 'لا توجد تقارير بعد';
+
+  @override
+  String get invalidInput => 'يرجى إدخال رسالة';
+
+  @override
+  String get reportSentSuccessfully => 'Report sent successfully';
+
+  @override
+  String get payment => 'Payment';
+
+  @override
+  String get contactUs => 'Contact Us';
+
+  @override
+  String get replyAdded => 'Reply added';
+
+  @override
+  String get adminReply => 'Admin reply:';
+
+  @override
+  String get english => 'English';
+
+  @override
+  String get appDescription => 'Medical appointment booking application.';
 }

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:medical_booking/generated_l10n/app_localizations.dart';
 import '../../services/doctor_service.dart';
 import 'package:intl/intl.dart';
+import 'package:medical_booking/screens/doctor/appointment_details_screen.dart';
 
 enum DocApptFilter { all, pending, confirmed, canceled }
 
@@ -94,239 +95,336 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     final doctorId = widget.doctorId;
     final currentStatus = _statusFromFilter();
 
-    return Scaffold(
-      appBar: widget.hideInnerHeader
-          ? null
-          : AppBar(title: Text(t.doctorDashboard)),
+    return WillPopScope(
+      onWillPop: () async {
+        await _clearDoctorUpdates(); // ✅ هنا
+        return true;
+      },
+      child: Scaffold(
+        appBar: widget.hideInnerHeader
+            ? null
+            : AppBar(title: Text(t.doctorDashboard)),
 
-      body: Column(
-        children: [
-          _filterChips(),
+        body: Column(
+          children: [
+            _filterChips(),
 
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: DoctorService().appointmentsStream(
-                doctorId,
-                currentStatus,
-              ),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  _startWaitTimer();
-                } else {
-                  _cancelWaitTimer();
-                }
+            Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: DoctorService().appointmentsStream(
+                  doctorId,
+                  currentStatus,
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    _startWaitTimer();
+                  } else {
+                    _cancelWaitTimer();
+                  }
 
-                if (snapshot.hasError) {
-                  return _centerMessage(t.errorLoadingAppointments);
-                }
+                  if (snapshot.hasError) {
+                    return _centerMessage(t.errorLoadingAppointments);
+                  }
 
-                if (!snapshot.hasData) {
-                  return _waitingView(t);
-                }
+                  if (!snapshot.hasData) {
+                    return _waitingView(t);
+                  }
 
-                final docs = snapshot.data!.docs;
+                  final docs = snapshot.data!.docs;
 
-                if (docs.isEmpty) {
-                  return _centerMessage(t.noAppointments);
-                }
+                  if (docs.isEmpty) {
+                    return _centerMessage(t.noAppointments);
+                  }
+                  docs.sort((a, b) {
+                    final aNew = a.data()['doctorUpdate'] == true ? 1 : 0;
+                    final bNew = b.data()['doctorUpdate'] == true ? 1 : 0;
+                    return bNew.compareTo(aNew); // ✅ الجديد فوق
+                  });
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final d = docs[i].data();
-                    final String? slotId = d['slotId'] as String?;
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: docs.length,
+                    itemBuilder: (context, i) {
+                      final d = docs[i].data();
+                      final String? slotId = d['slotId'] as String?;
 
-                    DateTime? dt;
-                    if (d['dateTime'] is Timestamp) {
-                      dt = (d['dateTime'] as Timestamp).toDate();
-                    }
-                    final DateTime todayStart = DateTime(
-                      DateTime.now().year,
-                      DateTime.now().month,
-                      DateTime.now().day,
-                    );
+                      DateTime? dt;
+                      if (d['dateTime'] is Timestamp) {
+                        dt = (d['dateTime'] as Timestamp).toDate();
+                      }
+                      final DateTime todayStart = DateTime(
+                        DateTime.now().year,
+                        DateTime.now().month,
+                        DateTime.now().day,
+                      );
 
-                    // ✅ true إذا الموعد أمس أو قبل
-                    final bool isBeforeToday =
-                        dt != null && dt.isBefore(todayStart);
+                      // ✅ true إذا الموعد أمس أو قبل
+                      final bool isBeforeToday =
+                          dt != null && dt.isBefore(todayStart);
 
-                    final patientName = (d['patientName'] ?? '').toString();
-                    final patientPhone = (d['patientPhone'] ?? '').toString();
-                    final status = (d['status'] ?? 'pending').toString();
+                      final patientName = (d['patientName'] ?? '').toString();
+                      final patientPhone = (d['patientPhone'] ?? '').toString();
+                      final status = (d['status'] ?? 'pending').toString();
 
-                    final Color statusColor = isBeforeToday
-                        ? Colors.grey
-                        : status == 'confirmed'
-                        ? Colors.green
-                        : status == 'canceled'
-                        ? Colors.red
-                        : Colors.orange;
+                      final Color statusColor = isBeforeToday
+                          ? Colors.grey
+                          : status == 'confirmed'
+                          ? Colors.green
+                          : status == 'canceled'
+                          ? Colors.red
+                          : Colors.orange;
 
-                    final isPending =
-                        status == 'pending' || status == 'requested';
-                    final isCancelable = status != 'canceled';
+                      final isPending =
+                          status == 'pending' || status == 'requested';
+                      final isCancelable = status != 'canceled';
 
-                    return Card(
-                      color: isBeforeToday ? Colors.grey.shade100 : null,
-                      child: ListTile(
-                        leading: Icon(
-                          Icons.calendar_month,
-                          color: isBeforeToday ? Colors.grey : null,
-                        ),
+                      return Stack(
+                        children: [
+                          Card(
+                            color: (isBeforeToday
+                                ? Colors.grey.shade100
+                                : null),
 
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                patientName.isEmpty ? t.patient : patientName,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: isBeforeToday ? Colors.grey : null,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withOpacity(.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                status == 'confirmed'
-                                    ? t.statusConfirmed
-                                    : status == 'canceled'
-                                    ? t.statusCanceled
-                                    : t.statusPending,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        subtitle: Text(
-                          dt != null
-                              ? "${DateFormat('yyyy-MM-dd HH:mm').format(dt)}\n${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}"
-                              : "${t.time}: ${t.notAvailable}\n${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}",
-                        ),
-
-                        isThreeLine: true,
-
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (v) async {
-                            try {
-                              if (v == 'confirm') {
-                                if (isBeforeToday) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        t.cannotConfirmPastAppointment,
-                                      ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // =========================
+                                  // ✅ السطر 1: اسم المريض
+                                  // =========================
+                                  Text(
+                                    patientName.isEmpty
+                                        ? t.patient
+                                        : patientName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                      color: isBeforeToday ? Colors.grey : null,
                                     ),
-                                  );
-                                  return;
-                                }
-
-                                await DoctorService().updateAppointmentStatus(
-                                  docs[i].id,
-                                  'confirmed',
-                                );
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(t.appointmentConfirmed),
                                   ),
-                                );
-                              } else if (v == 'cancel') {
-                                if (slotId == null || slotId.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(t.operationFailed)),
-                                  );
-                                  return;
-                                }
 
-                                await DoctorService().cancelAppointment(
-                                  appointmentId: docs[i].id,
-                                  slotId: slotId,
-                                );
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(t.appointmentCanceled),
-                                  ),
-                                );
-                              }
-                              // ✅ حذف الموعد (ملغى فقط)
-                              else if (v == 'delete') {
-                                await FirebaseFirestore.instance
-                                    .collection('appointments')
-                                    .doc(docs[i].id)
-                                    .delete();
+                                  const SizedBox(height: 8),
 
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(t.appointmentDeleted)),
-                                );
-                              }
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(t.operationFailed)),
-                              );
-                            }
-                          },
-
-                          itemBuilder: (_) {
-                            return [
-                              if (isPending && !isBeforeToday)
-                                PopupMenuItem(
-                                  value: 'confirm',
-                                  child: Text(t.confirmAppointment),
-                                ),
-
-                              if (isCancelable)
-                                PopupMenuItem(
-                                  value: 'cancel',
-                                  child: Text(t.cancelAppointment),
-                                ),
-
-                              // ✅ يظهر فقط إذا كان ملغى
-                              if (status == 'canceled')
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Row(
+                                  // =========================
+                                  // ✅ السطر 2: الوقت + الأزرار
+                                  // =========================
+                                  Row(
                                     children: [
-                                      const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.red,
+                                      // ✅ يسار: التاريخ
+                                      Expanded(
+                                        child: Text(
+                                          dt != null
+                                              ? DateFormat(
+                                                  'yyyy-MM-dd HH:mm',
+                                                ).format(dt)
+                                              : t.notAvailable,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
                                       ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        t.deleteAppointment,
-                                        style: const TextStyle(
-                                          color: Colors.red,
+
+                                      // ✅ يمين: edit + menu
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              color: Colors.blue,
+                                            ),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      AppointmentDetailsScreen(
+                                                        data: d,
+                                                        appointmentId:
+                                                            docs[i].id,
+                                                      ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+
+                                          PopupMenuButton<String>(
+                                            onSelected: (v) async {
+                                              try {
+                                                if (v == 'confirm') {
+                                                  if (isBeforeToday) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          t.cannotConfirmPastAppointment,
+                                                        ),
+                                                      ),
+                                                    );
+                                                    return;
+                                                  }
+
+                                                  await FirebaseFirestore
+                                                      .instance
+                                                      .collection(
+                                                        'appointments',
+                                                      )
+                                                      .doc(docs[i].id)
+                                                      .update({
+                                                        'status': 'confirmed',
+                                                        'patientUpdate': true,
+                                                        'updatedAt':
+                                                            FieldValue.serverTimestamp(),
+                                                      });
+                                                } else if (v == 'cancel') {
+                                                  if (slotId == null ||
+                                                      slotId.isEmpty)
+                                                    return;
+
+                                                  await DoctorService()
+                                                      .cancelAppointment(
+                                                        appointmentId:
+                                                            docs[i].id,
+                                                        slotId: slotId,
+                                                      );
+                                                } else if (v == 'delete') {
+                                                  await FirebaseFirestore
+                                                      .instance
+                                                      .collection(
+                                                        'appointments',
+                                                      )
+                                                      .doc(docs[i].id)
+                                                      .delete();
+                                                }
+                                              } catch (e) {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      t.operationFailed,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            itemBuilder: (_) => [
+                                              if (isPending && !isBeforeToday)
+                                                PopupMenuItem(
+                                                  value: 'confirm',
+                                                  child: Text(
+                                                    t.confirmAppointment,
+                                                  ),
+                                                ),
+                                              if (isCancelable)
+                                                PopupMenuItem(
+                                                  value: 'cancel',
+                                                  child: Text(
+                                                    t.cancelAppointment,
+                                                  ),
+                                                ),
+                                              if (status == 'canceled')
+                                                PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.delete_outline,
+                                                        color: Colors.red,
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        t.deleteAppointment,
+                                                        style: const TextStyle(
+                                                          color: Colors.red,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  // =========================
+                                  // ✅ السطر 3: الهاتف + الحالة
+                                  // =========================
+                                  Row(
+                                    children: [
+                                      // ✅ الهاتف يسار
+                                      Expanded(
+                                        child: Text(
+                                          "${t.phone}: ${patientPhone.isEmpty ? t.notAvailable : patientPhone}",
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+
+                                      // ✅ الحالة يمين
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withOpacity(.15),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          status == 'confirmed'
+                                              ? t.statusConfirmed
+                                              : status == 'canceled'
+                                              ? t.statusCanceled
+                                              : t.statusPending,
+                                          style: TextStyle(
+                                            color: statusColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                            ];
-                          },
-                        ),
+                                ],
+                              ),
+                            ),
+                          ),
 
-                        onTap: () => _callNumber(patientPhone),
-                      ),
-                    );
-                  },
-                );
-              },
+                          // ✅ 🔴 نقطة الإشعار
+                          if (d['doctorUpdate'] == true)
+                            Positioned(
+                              top: 6,
+                              left: 6,
+                              child: Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -357,26 +455,39 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
   Widget _filterChips() {
     final t = AppLocalizations.of(context)!;
 
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        _chip(t.all, DocApptFilter.all),
-        _chip(t.statusPending, DocApptFilter.pending),
-        _chip(t.statusConfirmed, DocApptFilter.confirmed),
-        _chip(t.statusCanceled, DocApptFilter.canceled),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+
+          _chip(t.all, DocApptFilter.all),
+          _chip(t.statusPending, DocApptFilter.pending),
+          _chip(t.statusConfirmed, DocApptFilter.confirmed),
+          _chip(t.statusCanceled, DocApptFilter.canceled),
+
+          const SizedBox(width: 8),
+        ],
+      ),
     );
   }
 
   Widget _chip(String label, DocApptFilter value) {
     return Padding(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
       child: ChoiceChip(
-        label: Text(label),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 12), // ✅ تصغير الخط
+        ),
         selected: _filter == value,
         onSelected: (_) => setState(() => _filter = value),
+
+        // ✅ تصغير الحجم
+        visualDensity: VisualDensity.compact,
+
+        // ✅ تقليل padding الداخلي
+        labelPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       ),
     );
   }
@@ -397,6 +508,18 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     if (_waitTimer != null) {
       _waitTimer!.cancel();
       _waitTimer = null;
+    }
+  }
+
+  Future<void> _clearDoctorUpdates() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('appointments')
+        .where('doctorId', isEqualTo: widget.doctorId)
+        .where('doctorUpdate', isEqualTo: true)
+        .get();
+
+    for (var doc in snap.docs) {
+      await doc.reference.update({"doctorUpdate": false});
     }
   }
 }

@@ -84,13 +84,39 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
               'doctorSpecialty': data['doctorSpecialty'] ?? '',
               'dateTime': dt,
               'status': data['status'] ?? 'pending',
-
               'slotId': data['slotId'], // ✅ مهم جدًا
+              'patientUpdate': data['patientUpdate'] == true,
             });
           }
 
           return results;
         });
+  }
+
+  Future<void> _clearPatientUpdates() async {
+    if (patientId == null) return;
+
+    final fs = FirebaseFirestore.instance;
+
+    final snap = await fs
+        .collection('appointments')
+        .where('patientId', isEqualTo: patientId)
+        .where('patientUpdate', isEqualTo: true)
+        .get();
+
+    final batch = fs.batch();
+
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {'patientUpdate': false});
+    }
+
+    await batch.commit();
+  }
+
+  @override
+  void dispose() {
+    _clearPatientUpdates(); // ✅ هنا يتم تنظيف الإشعارات
+    super.dispose();
   }
 
   @override
@@ -130,7 +156,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final a = items[i];
-
+              final bool hasUpdate = a['patientUpdate'] == true;
               final String doctorName = a['doctorName'];
               final String specialty = a['doctorSpecialty'];
 
@@ -165,173 +191,206 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen> {
                   statusLabel = t.statusPending;
               }
 
-              return Card(
-                elevation: 1,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+              return Stack(
+                children: [
+                  Card(
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.event_note),
-                          const SizedBox(width: 8),
+                          Row(
+                            children: [
+                              const Icon(Icons.event_note),
+                              const SizedBox(width: 8),
 
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+
+                                    if (specialty.isNotEmpty)
+                                      Text("${t.specialty}: $specialty"),
+                                  ],
+                                ),
+                              ),
+
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: statusColor.withOpacity(0.5),
                                   ),
                                 ),
-
-                                if (specialty.isNotEmpty)
-                                  Text("${t.specialty}: $specialty"),
-                              ],
-                            ),
+                                child: Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: statusColor,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
 
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: statusColor.withOpacity(0.5),
-                              ),
-                            ),
-                            child: Text(
-                              statusLabel,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
-                              ),
-                            ),
+                          const SizedBox(height: 10),
+
+                          Row(
+                            children: [
+                              const Icon(Icons.calendar_today, size: 16),
+                              const SizedBox(width: 6),
+                              Text(dateStr),
+                              const SizedBox(width: 16),
+                              const Icon(Icons.access_time, size: 16),
+                              const SizedBox(width: 6),
+                              Text(timeStr),
+                            ],
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (status == 'pending' || status == 'confirmed')
+                                TextButton.icon(
+                                  icon: const Icon(
+                                    Icons.cancel_outlined,
+                                    color: Colors.orange,
+                                  ),
+                                  label: Text(
+                                    t.cancelAppointment,
+                                    style: const TextStyle(
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    final confirmed =
+                                        await _confirmCancelDialog(context);
+                                    if (!confirmed) return;
+
+                                    final slotId = a['slotId'];
+                                    if (slotId == null || slotId.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(t.operationFailed),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    try {
+                                      await _doctorService.cancelAppointment(
+                                        appointmentId: a['id'],
+                                        slotId: slotId,
+                                      );
+
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              t.appointmentCanceled,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(t.operationFailed),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+
+                              if (status == 'canceled')
+                                TextButton.icon(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                  ),
+                                  label: Text(
+                                    t.deleteAppointment,
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                  onPressed: () async {
+                                    try {
+                                      await FirebaseFirestore.instance
+                                          .collection('appointments')
+                                          .doc(a['id'])
+                                          .delete();
+
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(t.appointmentDeleted),
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(t.operationFailed),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                            ],
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 10),
-
-                      Row(
-                        children: [
-                          const Icon(Icons.calendar_today, size: 16),
-                          const SizedBox(width: 6),
-                          Text(dateStr),
-                          const SizedBox(width: 16),
-                          const Icon(Icons.access_time, size: 16),
-                          const SizedBox(width: 6),
-                          Text(timeStr),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      // ✅ أزرار الإجراء
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          // 🔴 زر إلغاء الموعد
-                          if (status == 'pending' || status == 'confirmed')
-                            TextButton.icon(
-                              icon: const Icon(
-                                Icons.cancel_outlined,
-                                color: Colors.orange,
-                              ),
-                              label: Text(
-                                t.cancelAppointment,
-                                style: const TextStyle(color: Colors.orange),
-                              ),
-                              onPressed: () async {
-                                final confirmed = await _confirmCancelDialog(
-                                  context,
-                                );
-                                if (!confirmed) return;
-
-                                final slotId = a['slotId'];
-                                if (slotId == null || slotId.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(t.operationFailed)),
-                                  );
-                                  return;
-                                }
-
-                                try {
-                                  await _doctorService.cancelAppointment(
-                                    appointmentId: a['id'],
-                                    slotId: slotId,
-                                  );
-
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(t.appointmentCanceled),
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(t.operationFailed),
-                                      ),
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-
-                          // 🗑️ زر حذف الموعد
-                          if (status == 'canceled')
-                            TextButton.icon(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
-                              ),
-                              label: Text(
-                                t.deleteAppointment,
-                                style: const TextStyle(color: Colors.red),
-                              ),
-                              onPressed: () async {
-                                try {
-                                  await FirebaseFirestore.instance
-                                      .collection('appointments')
-                                      .doc(a['id'])
-                                      .delete();
-
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(t.appointmentDeleted),
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(t.operationFailed),
-                                      ),
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+
+                  /// ✅ النقطة الحمراء
+                  if (hasUpdate)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           );
