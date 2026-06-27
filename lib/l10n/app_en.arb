@@ -458,7 +458,25 @@
 "send": "Send",
 "reportSentSuccessfully": "Report sent successfully",
 "english": "English",
-"appDescription": "Medical appointment booking application."
+"appDescription": "Medical appointment booking application.",
+"adminMaintenance": "Admin Maintenance",
+"resetAppointments": "Reset Appointments",
+"resetSlots": "Reset Slots",
+"resetTransactions": "Reset Transactions",
+"dangerZone": "Danger Zone",
+"fullReset": "FULL RESET ALL DATA",
+"warningTitle": "WARNING",
+"warningMessage": "This will DELETE ALL DATA. Are you absolutely sure?",
+"continueBtn": "Continue",
+"finalConfirm": "FINAL CONFIRM",
+"finalMessage": "Last chance! All appointments and history will be lost.",
+"resetDone": "FULL RESET DONE",
+"appointmentsCleared": "Appointments cleared",
+"slotsCleared": "Slots cleared",
+"transactionsCleared": "Transactions cleared",
+"secretMode": "Secret mode...",
+"systemTools": "System Tools",
+"systemToolsSubtitle": "Maintenance & debug tools"
 
 
 }

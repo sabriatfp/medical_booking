@@ -1426,4 +1426,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appDescription => 'Medical appointment booking application.';
+
+  @override
+  String get adminMaintenance => 'Admin Maintenance';
+
+  @override
+  String get resetAppointments => 'Reset Appointments';
+
+  @override
+  String get resetSlots => 'Reset Slots';
+
+  @override
+  String get resetTransactions => 'Reset Transactions';
+
+  @override
+  String get dangerZone => 'Danger Zone';
+
+  @override
+  String get fullReset => 'FULL RESET ALL DATA';
+
+  @override
+  String get warningTitle => 'WARNING';
+
+  @override
+  String get warningMessage =>
+      'This will DELETE ALL DATA. Are you absolutely sure?';
+
+  @override
+  String get continueBtn => 'Continue';
+
+  @override
+  String get finalConfirm => 'FINAL CONFIRM';
+
+  @override
+  String get finalMessage =>
+      'Last chance! All appointments and history will be lost.';
+
+  @override
+  String get resetDone => 'FULL RESET DONE';
+
+  @override
+  String get appointmentsCleared => 'Appointments cleared';
+
+  @override
+  String get slotsCleared => 'Slots cleared';
+
+  @override
+  String get transactionsCleared => 'Transactions cleared';
+
+  @override
+  String get secretMode => 'Secret mode...';
+
+  @override
+  String get systemTools => 'System Tools';
+
+  @override
+  String get systemToolsSubtitle => 'Maintenance & debug tools';
 }

@@ -461,8 +461,25 @@
   "replyAdded": "Réponse ajoutée",
   "adminReply": "Réponse de l'administration :",
 "english": "Anglais",
-"appDescription": "Application de prise de rendez-vous médicaux."
-
+"appDescription": "Application de prise de rendez-vous médicaux.",
+"adminMaintenance": "Maintenance Admin",
+"resetAppointments": "Réinitialiser les rendez-vous",
+"resetSlots": "Réinitialiser les créneaux",
+"resetTransactions": "Réinitialiser les transactions",
+"dangerZone": "Zone dangereuse",
+"fullReset": "RÉINITIALISATION TOTALE",
+"warningTitle": "ATTENTION",
+"warningMessage": "Toutes les données seront supprimées. Êtes-vous sûr ?",
+"continueBtn": "Continuer",
+"finalConfirm": "CONFIRMATION FINALE",
+"finalMessage": "Dernière chance ! Toutes les données seront perdues.",
+"resetDone": "Réinitialisation terminée",
+"appointmentsCleared": "Rendez-vous supprimés",
+"slotsCleared": "Créneaux supprimés",
+"transactionsCleared": "Transactions supprimées",
+"secretMode": "Mode secret...",
+"systemTools": "Outils système",
+"systemToolsSubtitle": "Outils de maintenance et de débogage"
 
 
   

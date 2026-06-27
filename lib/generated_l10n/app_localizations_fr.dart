@@ -1436,4 +1436,60 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get appDescription => 'Application de prise de rendez-vous médicaux.';
+
+  @override
+  String get adminMaintenance => 'Maintenance Admin';
+
+  @override
+  String get resetAppointments => 'Réinitialiser les rendez-vous';
+
+  @override
+  String get resetSlots => 'Réinitialiser les créneaux';
+
+  @override
+  String get resetTransactions => 'Réinitialiser les transactions';
+
+  @override
+  String get dangerZone => 'Zone dangereuse';
+
+  @override
+  String get fullReset => 'RÉINITIALISATION TOTALE';
+
+  @override
+  String get warningTitle => 'ATTENTION';
+
+  @override
+  String get warningMessage =>
+      'Toutes les données seront supprimées. Êtes-vous sûr ?';
+
+  @override
+  String get continueBtn => 'Continuer';
+
+  @override
+  String get finalConfirm => 'CONFIRMATION FINALE';
+
+  @override
+  String get finalMessage =>
+      'Dernière chance ! Toutes les données seront perdues.';
+
+  @override
+  String get resetDone => 'Réinitialisation terminée';
+
+  @override
+  String get appointmentsCleared => 'Rendez-vous supprimés';
+
+  @override
+  String get slotsCleared => 'Créneaux supprimés';
+
+  @override
+  String get transactionsCleared => 'Transactions supprimées';
+
+  @override
+  String get secretMode => 'Mode secret...';
+
+  @override
+  String get systemTools => 'Outils système';
+
+  @override
+  String get systemToolsSubtitle => 'Outils de maintenance et de débogage';
 }

@@ -486,7 +486,25 @@
   "replyAdded": "تمت إضافة الرد",
   "adminReply": "رد الإدارة:",
   "english": "الإنجليزية",
-  "appDescription": "تطبيق لحجز المواعيد الطبية."
+  "appDescription": "تطبيق لحجز المواعيد الطبية.",
+  "adminMaintenance": "صيانة الإدارة",
+"resetAppointments": "حذف المواعيد",
+"resetSlots": "حذف الأوقات",
+"resetTransactions": "حذف المعاملات",
+"dangerZone": "منطقة خطرة",
+"fullReset": "إعادة ضبط كاملة",
+"warningTitle": "تحذير",
+"warningMessage": "سيتم حذف جميع البيانات. هل أنت متأكد؟",
+"continueBtn": "متابعة",
+"finalConfirm": "تأكيد نهائي",
+"finalMessage": "آخر فرصة! سيتم حذف كل المواعيد والتاريخ.",
+"resetDone": "تمت إعادة الضبط",
+"appointmentsCleared": "تم حذف المواعيد",
+"slotsCleared": "تم حذف الأوقات",
+"transactionsCleared": "تم حذف المعاملات",
+"secretMode": "الوضع السري...",
+"systemTools": "أدوات النظام",
+"systemToolsSubtitle": "أدوات الصيانة والتشخيص"
 
 
 }

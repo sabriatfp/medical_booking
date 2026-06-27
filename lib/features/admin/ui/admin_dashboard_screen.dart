@@ -9,6 +9,7 @@ import 'package:medical_booking/features/admin/ui/admin_subscription_requests_sc
 import 'package:provider/provider.dart';
 import '../../../providers/language_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'admin_maintenance_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -25,11 +26,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _permissionHandled = false;
   int _lastAdminCount = 0;
   int _lastReportsCount = 0;
+  int _maintenanceTapCount = 0;
+  DateTime? _firstTapTime;
 
   @override
   void initState() {
     super.initState();
     _checkAdminRole();
+  }
+
+  void _handleMaintenanceTap() {
+    if (!_isAdmin) return; // ✅ حماية مهمة
+
+    final now = DateTime.now();
+
+    if (_firstTapTime == null || now.difference(_firstTapTime!).inSeconds > 3) {
+      _firstTapTime = now;
+      _maintenanceTapCount = 1;
+    } else {
+      _maintenanceTapCount++;
+    }
+    if (_maintenanceTapCount == 3) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("🔐 Secret mode...")));
+    }
+
+    if (_maintenanceTapCount >= 5) {
+      _maintenanceTapCount = 0;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminMaintenanceScreen()),
+      );
+    }
   }
 
   Future<void> _checkAdminRole() async {
@@ -121,6 +151,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         subtitle: t.reportsSubtitle,
         builder: (_) => const AdminReportsScreen(),
       ),
+      _AdminEntry(
+        icon: Icons.build,
+        title: t.systemTools,
+        subtitle: t.systemToolsSubtitle,
+        builder: (_) => const SizedBox(), // لن نستعمله
+      ),
     ];
 
     return Scaffold(
@@ -152,6 +188,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
         itemBuilder: (_, index) {
           final it = items[index];
+          final isMaintenance = it.title == t.systemTools;
 
           /// ✅ إذا هذا هو كارت الطلبات
           final isRequests = it.title == t.subscriptionRequests;
@@ -212,12 +249,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         /// ✅ السهم فقط
                         trailing: const Icon(Icons.chevron_right),
 
-                        onTap: _isAdmin
-                            ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: it.builder),
-                              )
-                            : null,
+                        onTap: () {
+                          _handleMaintenanceTap();
+
+                          if (_isAdmin) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: it.builder),
+                            );
+                          }
+                        },
                       ),
 
                       /// ✅ ✅ الجرس
@@ -246,12 +287,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 subtitle: Text(it.subtitle),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: _isAdmin
-                    ? () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: it.builder),
-                      )
-                    : null,
+
+                onTap: () {
+                  /// ✅ هذا هو الكارت السري
+                  if (isMaintenance) {
+                    _handleMaintenanceTap();
+                    return;
+                  }
+
+                  /// ✅ باقي الكروت تشتغل عادي
+                  if (_isAdmin) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: it.builder),
+                    );
+                  }
+                },
               ),
             );
           }

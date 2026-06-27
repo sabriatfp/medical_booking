@@ -162,11 +162,13 @@ match /secretary_codes_public/{id} {
 match /financial_transactions/{id} {
 
   // ✅ الطبيب يرى معاملاته فقط
-  allow read: if
+allow read: if
+  isAdmin() // ✅ أهم سطر
+  || (
     isSignedIn()
     && userRole(request.auth.uid) == 'doctor'
-    && resource.data.doctorId == userDoc(request.auth.uid).data.doctorId;
-
+    && resource.data.doctorId == userDoc(request.auth.uid).data.doctorId
+  );
   // ✅ الإنشاء عند check-in
   allow create: if
     isSignedIn()
@@ -176,7 +178,7 @@ match /financial_transactions/{id} {
     );
 
   // ❌ لا تعديل ولا حذف (محاسبة)
-  allow update, delete: if false;
+allow delete: if isAdmin();
 }
     /* ============================= */
     /* doctors (PROFILE ONLY)        */
@@ -239,25 +241,25 @@ match /doctor_slots/{slotId} {
     && request.resource.data.patientId == request.auth.uid;
 
   // حذف/تحديث الـ slot عند الإلغاء
-  allow update, delete: if
+ allow update, delete: if
+  isAdmin() // ✅ أضف هذا
+  || (
     isSignedIn()
     && (
-      // ✅ المريض صاحب الحجز
       resource.data.patientId == request.auth.uid
 
-      // ✅ الطبيب صاحب الموعد
       || (
         userRole(request.auth.uid) == 'doctor'
         && userDoc(request.auth.uid).data.doctorId == resource.data.doctorId
       )
 
-      // ✅ السكرتير النشط لهذا الطبيب
       || (
         userRole(request.auth.uid) == 'secretary'
         && userDoc(request.auth.uid).data.activeSecretaryDoctorId
              == resource.data.doctorId
       )
-    );
+    )
+  );
 }
 /* ============================= */
 /* appointments                  */

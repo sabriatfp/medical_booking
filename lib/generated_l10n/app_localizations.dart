@@ -2883,6 +2883,114 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'تطبيق لحجز المواعيد الطبية.'**
   String get appDescription;
+
+  /// No description provided for @adminMaintenance.
+  ///
+  /// In ar, this message translates to:
+  /// **'صيانة الإدارة'**
+  String get adminMaintenance;
+
+  /// No description provided for @resetAppointments.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف المواعيد'**
+  String get resetAppointments;
+
+  /// No description provided for @resetSlots.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف الأوقات'**
+  String get resetSlots;
+
+  /// No description provided for @resetTransactions.
+  ///
+  /// In ar, this message translates to:
+  /// **'حذف المعاملات'**
+  String get resetTransactions;
+
+  /// No description provided for @dangerZone.
+  ///
+  /// In ar, this message translates to:
+  /// **'منطقة خطرة'**
+  String get dangerZone;
+
+  /// No description provided for @fullReset.
+  ///
+  /// In ar, this message translates to:
+  /// **'إعادة ضبط كاملة'**
+  String get fullReset;
+
+  /// No description provided for @warningTitle.
+  ///
+  /// In ar, this message translates to:
+  /// **'تحذير'**
+  String get warningTitle;
+
+  /// No description provided for @warningMessage.
+  ///
+  /// In ar, this message translates to:
+  /// **'سيتم حذف جميع البيانات. هل أنت متأكد؟'**
+  String get warningMessage;
+
+  /// No description provided for @continueBtn.
+  ///
+  /// In ar, this message translates to:
+  /// **'متابعة'**
+  String get continueBtn;
+
+  /// No description provided for @finalConfirm.
+  ///
+  /// In ar, this message translates to:
+  /// **'تأكيد نهائي'**
+  String get finalConfirm;
+
+  /// No description provided for @finalMessage.
+  ///
+  /// In ar, this message translates to:
+  /// **'آخر فرصة! سيتم حذف كل المواعيد والتاريخ.'**
+  String get finalMessage;
+
+  /// No description provided for @resetDone.
+  ///
+  /// In ar, this message translates to:
+  /// **'تمت إعادة الضبط'**
+  String get resetDone;
+
+  /// No description provided for @appointmentsCleared.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم حذف المواعيد'**
+  String get appointmentsCleared;
+
+  /// No description provided for @slotsCleared.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم حذف الأوقات'**
+  String get slotsCleared;
+
+  /// No description provided for @transactionsCleared.
+  ///
+  /// In ar, this message translates to:
+  /// **'تم حذف المعاملات'**
+  String get transactionsCleared;
+
+  /// No description provided for @secretMode.
+  ///
+  /// In ar, this message translates to:
+  /// **'الوضع السري...'**
+  String get secretMode;
+
+  /// No description provided for @systemTools.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدوات النظام'**
+  String get systemTools;
+
+  /// No description provided for @systemToolsSubtitle.
+  ///
+  /// In ar, this message translates to:
+  /// **'أدوات الصيانة والتشخيص'**
+  String get systemToolsSubtitle;
 }
 
 class _AppLocalizationsDelegate

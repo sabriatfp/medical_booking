@@ -1420,4 +1420,58 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get appDescription => 'تطبيق لحجز المواعيد الطبية.';
+
+  @override
+  String get adminMaintenance => 'صيانة الإدارة';
+
+  @override
+  String get resetAppointments => 'حذف المواعيد';
+
+  @override
+  String get resetSlots => 'حذف الأوقات';
+
+  @override
+  String get resetTransactions => 'حذف المعاملات';
+
+  @override
+  String get dangerZone => 'منطقة خطرة';
+
+  @override
+  String get fullReset => 'إعادة ضبط كاملة';
+
+  @override
+  String get warningTitle => 'تحذير';
+
+  @override
+  String get warningMessage => 'سيتم حذف جميع البيانات. هل أنت متأكد؟';
+
+  @override
+  String get continueBtn => 'متابعة';
+
+  @override
+  String get finalConfirm => 'تأكيد نهائي';
+
+  @override
+  String get finalMessage => 'آخر فرصة! سيتم حذف كل المواعيد والتاريخ.';
+
+  @override
+  String get resetDone => 'تمت إعادة الضبط';
+
+  @override
+  String get appointmentsCleared => 'تم حذف المواعيد';
+
+  @override
+  String get slotsCleared => 'تم حذف الأوقات';
+
+  @override
+  String get transactionsCleared => 'تم حذف المعاملات';
+
+  @override
+  String get secretMode => 'الوضع السري...';
+
+  @override
+  String get systemTools => 'أدوات النظام';
+
+  @override
+  String get systemToolsSubtitle => 'أدوات الصيانة والتشخيص';
 }
